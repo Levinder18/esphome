@@ -1,0 +1,185 @@
+# Based on esphome-modular-lvgl-buttons
+
+esphome:
+  name: "waveshare-esp32-s3-t-lcd-28c"
+  friendly_name: "Waveshare-2.8-round"
+  comment: "Waveshare ESP32-S3-Touch-LCD-2.8C 480px Round Screen"
+
+# Enable logging
+logger:
+# api:
+# web_server:
+#   port: 80
+#   version: 3 
+# ota:
+#   platform: esphome
+# wifi:
+#   ssid: !secret wifi_ssid
+#   password: !secret wifi_password 
+
+# packages:  
+  # Harware description file
+  # hardware: !include modules/hardware/waveshare-esp32-s3-touch-lcd-2.8c.yaml
+
+api:
+  encryption:
+    key: !secret encryption_key
+
+host:
+
+display:
+  - platform: sdl
+    id: my_display
+    # show_test_card: true
+    dimensions:
+      width: 480
+      height: 480
+
+time:
+  - platform: homeassistant
+    id: homeassistant_time
+    # on_time_sync:
+    #   - script.execute: time_update
+    #   - if:
+    #       condition:
+    #         lambda: 'return id(device_last_restart).state == "";'
+    #       then:
+    #         - text_sensor.template.publish:
+    #             id: device_last_restart
+    #             state: !lambda 'return id(homeassistant_time).now().strftime("%a %d %b %Y - %I:%M:%S %p");'
+
+    # Update the clock every second
+    # on_time:
+    #   - seconds: "*"
+    #     then:
+    #       - script.execute: arc_update
+
+# script:
+#   - id: arc_update
+#     then:
+#       - lvgl.arc.update:
+#           id: arc_id
+#           value: !lambda |-
+#             return (lv_arc_get_value(arc_id) + 1) % 5;
+  # - id: next_page
+  #   then:
+  #     - lvgl.page.next:
+
+globals:
+  - id: current_arc_value
+    type: int
+    initial_value: '0'
+
+interval:
+  - interval: 500ms
+    then:
+      - lambda: |-
+          // Smoothly increment current_arc_value towards target
+          id(current_arc_value) = (id(current_arc_value) + 1) % 10;
+          lv_arc_set_value(id(arc_id), id(current_arc_value));
+  # - interval: 5000ms
+  #   then:
+  #     lvgl.page.next:
+
+# LVGL Configuration
+lvgl:
+  - id: lvgl_display
+    displays:
+      - my_display
+    touchscreens:
+      - my_touchscreen
+    page_wrap: true
+    pages:
+      - id: main_page
+        on_load:
+          then:
+            - logger.log: "🚀 main page loaded!"
+        on_swipe_up:
+          lvgl.page.next:
+            animation: OUT_TOP
+            time: 300ms
+        on_swipe_down:
+          lvgl.page.next:
+            animation: OUT_BOTTOM
+            time: 300ms
+        width: 100%
+        bg_color: White
+        widgets:
+          - tileview:
+              id: main_tileview
+              width: 480
+              height: 480
+              on_value:
+                - if:
+                    condition:
+                      lambda: return tile == id(tile1);
+                    then:
+                      - logger.log: "tile1 is now showing"
+              tiles:
+                - id: tile1
+                  column: 0
+                  row: 0
+                  widgets:
+                    - label:
+                        id: coord_text
+                        align: CENTER
+                        text_align: CENTER
+                        text: 'Touch the screen'
+                    - arc:
+                        x: 0
+                        y: 0
+                        max_value: 10
+                        min_value: 0
+                        width: 480
+                        height: 480
+                        id: arc_id
+                        start_angle: 0
+                        end_angle: 359
+                        rotation: 270
+                        value: 0
+                        adjustable: false
+                - id: tile2
+                  column: 1
+                  row: 0
+                  bg_color: LightBlue
+                  widgets:
+                    - label:
+                        align: CENTER
+                        text_align: CENTER
+                        text: "This is the second tile"
+      - id: third_page
+        on_load:
+          then:
+            - logger.log: "🚀 third page loaded!"
+        on_swipe_up:
+          lvgl.page.next:
+            animation: OUT_TOP
+            time: 300ms
+        on_swipe_down:
+          lvgl.page.next:
+            animation: OUT_BOTTOM
+            time: 300ms
+        width: 100%
+        bg_color: White
+        widgets:
+          - label:
+              align: CENTER
+              text_align: CENTER
+              text: "This is the third page"
+              
+
+
+
+touchscreen:
+  - id: my_touchscreen
+    platform: sdl
+    on_update:
+        - lvgl.label.update:
+            id: coord_text
+            text: !lambda return str_sprintf("Touch points:\n id=%d x=%d, y=%d", touches[0].id, touches[0].x, touches[0].y);
+        - lambda: |-
+            for (auto touch: touches)  {
+                if (touch.state <= 2) {
+                  ESP_LOGI("Touch points:", "id=%d x=%d, y=%d", touch.id, touch.x, touch.y);
+                }
+            }

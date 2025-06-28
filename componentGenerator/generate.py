@@ -1,55 +1,105 @@
-
 import os
 import yaml
 import re
 import argparse
+from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
-
-# --- Parse arguments ---
-
+# --- Argument parsing ---
 parser = argparse.ArgumentParser(description="Generate component files from templates.")
 parser.add_argument("-f", "--file", required=True, help="Path to the components YAML file.")
 parser.add_argument("-t", "--templates", default="componentGenerator/templates", help="Path to the templates directory (default: componentGenerator/templates)")
+parser.add_argument("-c", "--custom-templates", default="componentGenerator/custom_templates", help="Path to the custom templates directory (default: componentGenerator/custom_templates)")
 parser.add_argument("-o", "--output", default="components", help="Path to the output directory (default: components)")
-args = parser.parse_args()
 
-# --- Load the specified components YAML file ---
-with open(args.file) as f:
-    config = yaml.safe_load(f)
+def to_nice_yaml(value, indent=2):
+    return yaml.dump(value, indent=indent, default_flow_style=False, sort_keys=False)
 
+def main():
+    args = parser.parse_args()
 
-# --- Setup Jinja2 environment ---
-TEMPLATE_DIR = args.templates
-env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
+    base_output_dir = args.output
+    template_dir = args.templates
+    custom_template_dir = args.custom_templates
 
-# --- Dynamically build template registry ---
-registry = {}  # { type: { section: template } }
+    os.makedirs(base_output_dir, exist_ok=True)
+    env = Environment(loader=FileSystemLoader([template_dir, custom_template_dir]))
+    env.filters['to_nice_yaml'] = to_nice_yaml
 
-for filename in os.listdir(TEMPLATE_DIR):
-    match = re.match(r"(?P<type>\w+)_(?P<section>\w+)\.yaml\.j2$", filename)
-    if match:
-        type_ = match.group("type")
-        section = match.group("section")
-        registry.setdefault(type_, {})[section] = env.get_template(filename)
+    with open(args.file) as f:
+        config = yaml.safe_load(f)
 
+    defaults = config.get("defaults", {})
+    components = [apply_inheritance(c, defaults) for c in config["components"]]
 
-# --- Output ---
-BASE_OUTPUT_DIR = args.output
-os.makedirs(BASE_OUTPUT_DIR, exist_ok=True)
+    registry = build_template_registry(template_dir, env)
+    validate_components(components, registry, custom_template_dir)
 
-for comp in config["components"]:
+    for comp in components:
+        process_component(comp, registry, env, base_output_dir, custom_template_dir)
+
+def load_yaml_string(data):
+    try:
+        return yaml.safe_load(data)
+    except Exception as e:
+        print(f"YAML parse error: {e}")
+        return None
+
+def build_template_registry(template_dir, env):
+    registry = {}
+    for filename in os.listdir(template_dir):
+        match = re.match(r"(?P<type>\w+)_(?P<section>\w+)\.yaml\.j2$", filename)
+        if match:
+            type_ = match.group("type")
+            section = match.group("section")
+            registry.setdefault(type_, {})[section] = env.get_template(filename)
+    return registry
+
+def render_component(comp, registry, env, output_dir):
     comp_id = comp["id"]
     comp_type = comp["type"]
-    comp_dir = os.path.join(BASE_OUTPUT_DIR, comp_id)
+    comp_dir = os.path.join(output_dir, comp_id)
     os.makedirs(comp_dir, exist_ok=True)
 
     templates = registry.get(comp_type, {})
-
     for section, template in templates.items():
-        if section == "interval" and "interval" not in comp:
-            continue
         output_path = os.path.join(comp_dir, f"{section}.yaml")
         with open(output_path, "w") as f:
             f.write(template.render(**comp))
-        print(f"[✓] Generated {section} for {comp_id}")
+        print(f"[✓] {comp_id}: {section}")
+
+def process_component(comp, registry, env, output_dir, custom_template_dir):
+    comp_type = comp["type"]
+    custom_template_path = os.path.join(custom_template_dir, f"{comp_type}.yaml.j2")
+    if os.path.exists(custom_template_path):
+        template = env.get_template(f"{comp_type}.yaml.j2")
+        rendered_yaml = template.render(**comp)
+        parsed = load_yaml_string(rendered_yaml)
+        if parsed and "components" in parsed:
+            for sub in parsed["components"]:
+                process_component(sub, registry, env, output_dir, custom_template_dir)
+    else:
+        render_component(comp, registry, env, output_dir)
+
+def apply_inheritance(component, defaults):
+    if "extends" in component:
+        base = defaults.get(component["extends"], {}).copy()
+        base.update(component)
+        return base
+    return component
+
+def validate_components(components, registry, custom_template_dir):
+    ids = set()
+    for comp in components:
+        if "id" not in comp:
+            raise ValueError("Component missing 'id'")
+        if comp["id"] in ids:
+            raise ValueError(f"Duplicate component id: {comp['id']}")
+        ids.add(comp["id"])
+        type_ = comp["type"]
+        if type_ not in registry and not os.path.exists(os.path.join(custom_template_dir, f"{type_}.yaml.j2")):
+            raise ValueError(f"Unknown component type: {type_}")
+
+# ✅ Ensure main only runs when called directly
+if __name__ == "__main__":
+    main()

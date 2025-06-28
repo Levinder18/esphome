@@ -1,3 +1,6 @@
 .DS_Store
 
 secrets.yaml
+/components/
+__pycache__/
+.pytest_cache/

@@ -1,0 +1,12 @@
+components:
+  - id: {{ id }}_arc
+    type: arc
+    min: 0
+    max: 100
+    value: 100
+
+  - id: {{ id }}_controller
+    type: arc_countdown_interval
+    arc_id: {{ id }}_arc
+    duration: {{ duration }}
+    on_done_callback: {{ on_countdown_done_callback }}

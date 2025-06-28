@@ -1,0 +1,12 @@
+- interval: 100ms
+  then:
+    - lambda: |-
+        static int counter = 0;
+        static const int max_count = {{ duration }} / 100;
+        counter++;
+        int new_value = 100 - ((counter * 100) / max_count);
+        lv_arc_set_value(id({{ arc_id }}), new_value);
+        if (counter >= max_count) {
+            counter = 0;
+            id({{ on_done_callback }}).execute();
+        }

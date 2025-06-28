@@ -1,0 +1,11 @@
+arc:
+    id: arc_countdown1_arc
+    align: CENTER
+    max_value: 100
+    value: 100
+    adjustable: false
+    start_angle: 0
+    end_angle: 359
+    rotation: 270
+    height: 480
+    width: 480

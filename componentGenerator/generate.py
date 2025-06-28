@@ -12,8 +12,9 @@ parser.add_argument("-t", "--templates", default="componentGenerator/templates",
 parser.add_argument("-c", "--custom-templates", default="componentGenerator/custom_templates", help="Path to the custom templates directory (default: componentGenerator/custom_templates)")
 parser.add_argument("-o", "--output", default="components", help="Path to the output directory (default: components)")
 
-def to_nice_yaml(value, indent=2):
-    return yaml.dump(value, indent=indent, default_flow_style=False, sort_keys=False)
+def to_nice_yaml(value, indent=2, explicit_end=True):
+    out = yaml.dump(value, indent=indent, default_flow_style=False, sort_keys=False, explicit_end=False)
+    return out.strip().replace('...', '')  # Remove doc end
 
 def main():
     args = parser.parse_args()
@@ -58,22 +59,25 @@ def build_template_registry(template_dir, env):
 def render_component(comp, registry, env, output_dir):
     comp_id = comp["id"]
     comp_type = comp["type"]
-    comp_dir = os.path.join(output_dir, comp_id)
-    os.makedirs(comp_dir, exist_ok=True)
-
     templates = registry.get(comp_type, {})
     for section, template in templates.items():
-        output_path = os.path.join(comp_dir, f"{section}.yaml")
+        section_dir = os.path.join(output_dir, section)
+        os.makedirs(section_dir, exist_ok=True)
+        output_path = os.path.join(section_dir, f"{comp_id}.yaml")
         with open(output_path, "w") as f:
-            f.write(template.render(**comp))
-        print(f"[✓] {comp_id}: {section}")
+            rendered = template.render(context=comp)
+            non_empty_lines = [line for line in rendered.splitlines() if line.strip()]
+            f.write('\n'.join(non_empty_lines))
+        print(f"[✓] {section}: {comp_id}")
 
 def process_component(comp, registry, env, output_dir, custom_template_dir):
     comp_type = comp["type"]
     custom_template_path = os.path.join(custom_template_dir, f"{comp_type}.yaml.j2")
     if os.path.exists(custom_template_path):
         template = env.get_template(f"{comp_type}.yaml.j2")
-        rendered_yaml = template.render(**comp)
+        rendered_yaml = template.render(context=comp)
+        # print the rendered YAML for debugging
+        print(rendered_yaml)
         parsed = load_yaml_string(rendered_yaml)
         if parsed and "components" in parsed:
             for sub in parsed["components"]:

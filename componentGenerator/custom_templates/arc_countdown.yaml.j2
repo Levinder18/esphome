@@ -1,12 +1,18 @@
 components:
-  - id: {{ id }}_arc
+  - id: {{ context.id }}_arc
     type: arc
     min: 0
     max: 100
     value: 100
+    start_angle: 0
+    end_angle: 359
+    rotation: 270
+    {% if context.arc_params %}
+    {{ context.arc_params | to_nice_yaml(indent=4, explicit_end=False) | indent(4) }}
+    {% endif %}
 
-  - id: {{ id }}_controller
+  - id: {{ context.id }}_controller
     type: arc_countdown_interval
-    arc_id: {{ id }}_arc
-    duration: {{ duration }}
-    on_done_callback: {{ on_countdown_done_callback }}
+    arc_id: {{ context.id }}_arc
+    duration: {{ context.duration }}
+    on_done_callback: {{ context.on_countdown_done_callback }}

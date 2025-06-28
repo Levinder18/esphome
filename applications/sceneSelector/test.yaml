@@ -55,7 +55,7 @@ time:
     #     then:
     #       - script.execute: arc_update
 
-# script:
+script:
 #   - id: arc_update
 #     then:
 #       - lvgl.arc.update:
@@ -65,19 +65,23 @@ time:
   # - id: next_page
   #   then:
   #     - lvgl.page.next:
+  - id: countdown1_done
+    then:
+      - logger.log: "Countdown 1 completed!"
 
-globals:
-  - id: current_arc_value
-    type: int
-    initial_value: '0'
+# globals:
+#   - id: current_arc_value
+#     type: int
+#     initial_value: '0'
 
 interval:
-  - interval: 500ms
-    then:
-      - lambda: |-
-          // Smoothly increment current_arc_value towards target
-          id(current_arc_value) = (id(current_arc_value) + 1) % 10;
-          lv_arc_set_value(id(arc_id), id(current_arc_value));
+  - !include components/interval/arc_countdown1_controller.yaml
+  # - interval: 500ms
+  #   then:
+  #     - lambda: |-
+  #         // Smoothly increment current_arc_value towards target
+  #         id(current_arc_value) = (id(current_arc_value) + 1) % 10;
+  #         lv_arc_set_value(id(arc_id), id(current_arc_value));
   # - interval: 5000ms
   #   then:
   #     lvgl.page.next:
@@ -120,25 +124,26 @@ lvgl:
                 - id: tile1
                   column: 0
                   row: 0
-                  widgets:
+                  widgets: 
+                    - !include components/widget/arc_countdown1_arc.yaml
                     - label:
                         id: coord_text
                         align: CENTER
                         text_align: CENTER
                         text: 'Touch the screen'
-                    - arc:
-                        x: 0
-                        y: 0
-                        max_value: 10
-                        min_value: 0
-                        width: 480
-                        height: 480
-                        id: arc_id
-                        start_angle: 0
-                        end_angle: 359
-                        rotation: 270
-                        value: 0
-                        adjustable: false
+                    # - arc:
+                    #     x: 0
+                    #     y: 0
+                    #     max_value: 10
+                    #     min_value: 0
+                    #     width: 480
+                    #     height: 480
+                    #     id: arc_id
+                    #     start_angle: 0
+                    #     end_angle: 359
+                    #     rotation: 270
+                    #     value: 0
+                    #     adjustable: false
                 - id: tile2
                   column: 1
                   row: 0

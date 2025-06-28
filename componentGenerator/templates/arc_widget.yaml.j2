@@ -1,12 +1,16 @@
-- arc:
-    id: {{ id }}
+arc:
+    id: {{ context.id }}
     align: CENTER
-    width: {{ width }}
-    height: {{ height }}
-    min_value: {{ min }}
-    max_value: {{ max }}
-    value: {{ value }}
-    start_angle: 0
-    end_angle: 359
-    rotation: 270
+    {% if context.min %}
+    min_value: {{ context.min }}
+    {% endif %}
+    {% if context.max %}
+    max_value: {{ context.max }}
+    {% endif %}
+    {% if context.value %}
+    value: {{ context.value }}
+    {% endif %}
     adjustable: false
+    {% for key, value in context.items() if key not in ['type', 'id', 'min', 'max', 'value'] %}
+    {{ key }}: {{ value }}
+    {% endfor %}

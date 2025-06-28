@@ -1,0 +1,8 @@
+components:
+  - id: arc_countdown1
+    type: arc_countdown
+    duration: 5000
+    on_countdown_done_callback: countdown1_done
+    arc_params:
+      height: 480
+      width: 480

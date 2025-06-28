@@ -1,14 +1,26 @@
+
 import os
 import yaml
 import re
+import argparse
 from jinja2 import Environment, FileSystemLoader
 
-# --- Load components.yaml ---
-with open("components.yaml") as f:
+
+# --- Parse arguments ---
+
+parser = argparse.ArgumentParser(description="Generate component files from templates.")
+parser.add_argument("-f", "--file", required=True, help="Path to the components YAML file.")
+parser.add_argument("-t", "--templates", default="componentGenerator/templates", help="Path to the templates directory (default: componentGenerator/templates)")
+parser.add_argument("-o", "--output", default="components", help="Path to the output directory (default: components)")
+args = parser.parse_args()
+
+# --- Load the specified components YAML file ---
+with open(args.file) as f:
     config = yaml.safe_load(f)
 
+
 # --- Setup Jinja2 environment ---
-TEMPLATE_DIR = "templates"
+TEMPLATE_DIR = args.templates
 env = Environment(loader=FileSystemLoader(TEMPLATE_DIR))
 
 # --- Dynamically build template registry ---
@@ -21,8 +33,9 @@ for filename in os.listdir(TEMPLATE_DIR):
         section = match.group("section")
         registry.setdefault(type_, {})[section] = env.get_template(filename)
 
+
 # --- Output ---
-BASE_OUTPUT_DIR = "components"
+BASE_OUTPUT_DIR = args.output
 os.makedirs(BASE_OUTPUT_DIR, exist_ok=True)
 
 for comp in config["components"]:

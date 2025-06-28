@@ -13,6 +13,7 @@ logger:
 #   version: 3 
 # ota:
 #   platform: esphome
+#   # password: "asddasda27aab65a48484502b332f"
 # wifi:
 #   ssid: !secret wifi_ssid
 #   password: !secret wifi_password 

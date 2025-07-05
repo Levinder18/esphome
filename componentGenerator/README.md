@@ -1,0 +1,167 @@
+# Component Generator for ESPHome
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Installation](#installation)
+- [Usage Example](#usage-example)
+- [Indentation Requirements](#indentation-requirements)
+- [Templates](#templates)
+  - [arc_countdown](#arc_countdown)
+- [Developer Documentation](#developer-documentation)
+  - [Architecture](#architecture)
+  - [Data Flow](#data-flow)
+  - [Adding a New Template](#adding-a-new-template)
+  - [Guidelines](#guidelines)
+
+## Overview
+
+This tool allows you to generate complex [ESPHome](https://esphome.io/) YAML configurations using composable, reusable Jinja2-based component templates. It is designed to help you build and maintain large or dynamic ESPHome projects by enabling modularity and code reuse.
+
+- **Templates**: Write components as Jinja2 macros, making it easy to share and reuse logic.
+- **Auto-collection**: Components can auto-collect YAML sections (like `interval`, `globals`, `script`) and merge them into the final output.
+- **Custom Logic**: Use Python helpers (e.g., `lambda_multiline_body`) to write readable, multi-line ESPHome lambdas.
+
+## Installation
+
+1. **Clone the repository** (if you haven't already):
+   ```sh
+   git clone <your-repo-url>
+   cd esphome/componentGenerator
+   ```
+2. **Install dependencies** (preferably in a virtual environment):
+   ```sh
+   pip install -r requirements.txt
+   ```
+
+## Usage Example
+
+To generate a YAML file from a main template:
+
+```sh
+python generate.py -f main.yaml.j2 -o ../output/final.yaml
+```
+
+- `-f`: Path to your main Jinja2 YAML template.
+- `-o`: Output path for the generated YAML (default: `output/final.yaml`).
+- `-t`: (Optional) Path to the templates directory (default: `componentGenerator/templates`).
+
+Your main template can use component macros, e.g.:
+
+```jinja-yaml
+script:
+  - id: arc1_done
+    then:
+      - lambda: |-
+          ESP_LOGI("arc1", "arc1 countdown finished");
+
+lvgl:
+  pages:
+    - id: main
+      widgets:
+        - {{ arc_countdown("arc1", duration=5000) | indent(10) }}
+```
+
+---
+
+## Indentation Requirements
+
+Unfortunatly, indentation is way too dynamic in order to have it automatically adjusted :(
+
+When using component macros in your main template, you must ensure that the generated YAML is correctly indented to fit into its parent structure. Jinja2 provides the `indent` filter for this purpose.
+
+**How to use:**
+
+- Always wrap your component macro call with the `indent` filter, specifying the number of spaces needed for correct YAML nesting.
+- For example, in `main.yaml.j2`:
+
+  ```jinja
+  widgets:
+    - {{ arc_countdown("arc1", duration=5000) | indent(10) }}
+  ```
+
+- Adjust the indentation level (`indent(10)` in this example) to match the nesting of your YAML structure.
+
+**Why is this important?**
+
+- YAML is whitespace-sensitive. Incorrect indentation can lead to invalid or misinterpreted configurations.
+- Using the `indent` filter ensures that the output from your component macros integrates seamlessly into the final YAML.
+
+---
+
+## Templates
+
+### arc_countdown
+
+A reusable component macro for displaying a countdown arc.
+
+**Parameters:**
+- `id` (required): Unique identifier for the arc and its associated script.
+- `duration` (optional, default: 5000): Countdown duration in milliseconds.
+
+**Features:**
+- Registers an `interval` that updates the arc value every 100ms.
+- Triggers a script (`<id>_done`) when the countdown completes.
+- Uses `lambda_multiline_body` to ensure correct formatting of the ESPHome lambda.
+
+**Example usage in a template:**
+```jinja
+{{ arc_countdown("arc1", duration=5000) }}
+```
+
+**Generated YAML snippet:**
+```yaml
+arc:
+  id: arc1_arc
+  value: 100
+  max_value: 100
+  min_value: 0
+  align: CENTER
+  start_angle: 0
+  end_angle: 359
+  rotation: 270
+  adjustable: false
+```
+
+---
+
+# Developer Documentation
+
+## Architecture
+
+- **generate.py**: The main script. Loads the main template, registers all component macros, and merges auto-collected YAML sections.
+- **templates/components/**: Directory for reusable component templates (Jinja2 macros).
+- **main.yaml.j2**: Example main template using components.
+- **lambda_multiline_body**: Helper to write readable, multi-line ESPHome lambdas in templates.
+- **register_component**: Macro helper to register a component and its auto-collected sections.
+
+### Data Flow
+
+1. **Component Registration**: Each component macro calls `register_component`, passing its ID and any auto-collected YAML (e.g., intervals, scripts).
+2. **Rendering**: The main template is rendered, invoking component macros as needed.
+3. **Auto-Collection**: After rendering, the script merges all auto-collected sections (like `interval`, `globals`, `script`) into the root of the final YAML.
+4. **Output**: The merged YAML is written to the output file.
+
+## Adding a New Template
+
+1. **Create a Macro**: Add a new `.j2` file in `templates/components/` with a Jinja2 macro for your component.
+2. **Register the Component**: Inside your macro, use `register_component(id=..., auto_collected=...)` to register any YAML sections your component needs to add globally (e.g., intervals, scripts).
+3. **Use `lambda_multiline_body` for Lambdas**: When writing ESPHome lambdas, always use `lambda_multiline_body` to ensure correct YAML formatting and indentation.
+   ```jinja
+   {'lambda': lambda_multiline_body('''
+     // your C++ code here
+   ''')}
+   ```
+4. **Naming**: Macro names should be unique and descriptive. The macro should accept an `id` parameter and any other configuration options.
+5. **Testing**: Add your macro to `main.yaml.j2` and run the generator to verify output.
+
+## Guidelines
+
+- **Auto-Collection**: Only use auto-collection for sections that must be at the root of the YAML (e.g., `interval`, `globals`, `script`).
+- **No Side Effects**: Macros should not have side effects outside of registration and YAML generation.
+- **Readability**: Use multi-line strings and helpers for clarity.
+- **Extensibility**: Add new global sections to `global_registry` in `generate.py` if needed.
+
+---
+
+For questions or contributions, please open an issue or pull request.

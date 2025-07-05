@@ -1,0 +1,31 @@
+{% macro arc_countdown(id, duration=5000) %}
+{% set auto = {"interval": [
+  {
+    'interval': '100ms',
+    'then': [
+      {'lambda': lambda_multiline_body('''
+        static int counter = 0;
+        static const int max_count = ' ~ duration ~ ' / 100;
+        counter++;
+        int new_value = (counter * 100) / max_count;
+        lv_arc_set_value(id(' ~ id ~ '_arc), new_value);
+        if (counter >= max_count) {
+            counter = 0;
+            id(' ~ id ~ '_done).execute();
+        }
+      ''')}
+    ]
+  }
+]} %}
+{% do register_component(id=id, auto_collected=auto) %}
+arc:
+  id: {{ id }}_arc
+  value: 100
+  max_value: 100
+  min_value: 0
+  align: CENTER
+  start_angle: 0
+  end_angle: 359
+  rotation: 270
+  adjustable: false
+{% endmacro %}

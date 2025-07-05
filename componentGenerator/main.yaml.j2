@@ -1,0 +1,16 @@
+script:
+  - id: arc1_done
+    then:
+      - lambda: |-
+          ESP_LOGI("arc1", "arc1 countdown finished");
+
+interval: 
+  - interval: 1000ms
+    then:
+      - ESP_LOGI("tick", "tuck");
+
+lvgl:
+  pages:
+    - id: main
+      widgets:
+        - {{ arc_countdown("arc1", duration=5000) | indent(10) }}

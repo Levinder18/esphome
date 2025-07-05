@@ -1,16 +1,15 @@
 
-FILE ?= componentGenerator/components.yaml
+FILE ?= componentGenerator/main.yaml.j2
 TEMPLATES ?= componentGenerator/templates
-CUSTOM_TEMPLATES ?= componentGenerator/custom_templates
-OUTPUT ?= components
+OUTPUT ?= ./output/final.yaml
 
 .PHONY: generate-components install-component-generator
 
 generate-components:
-	. .venv/bin/activate && python3 componentGenerator/generate.py -f $(FILE) -t $(TEMPLATES) -c $(CUSTOM_TEMPLATES) -o $(OUTPUT)
+	. .venv/bin/activate && python3 componentGenerator/generate.py -f $(FILE) -t $(TEMPLATES) -o $(OUTPUT)
 
 generate-components-application:
-	. .venv/bin/activate && python3 componentGenerator/generate.py -f applications/$(APPLICATION)/components.yaml -t $(TEMPLATES) -c $(CUSTOM_TEMPLATES) -o applications/$(APPLICATION)/components
+	. .venv/bin/activate && python3 componentGenerator/generate.py -f applications/$(APPLICATION)/main.yaml.j2 -t $(TEMPLATES) -o applications/$(APPLICATION)/output/final.yaml
 
 install-component-generator:
 	python3 -m venv .venv

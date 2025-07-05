@@ -6,104 +6,167 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 
 # --- Argument parsing ---
-parser = argparse.ArgumentParser(description="Generate component files from templates.")
-parser.add_argument("-f", "--file", required=True, help="Path to the components YAML file.")
+parser = argparse.ArgumentParser(description="Generate esphome yaml from template with composable components.")
+parser.add_argument("-f", "--file", required=True, help="Path to the main yaml template.")
 parser.add_argument("-t", "--templates", default="componentGenerator/templates", help="Path to the templates directory (default: componentGenerator/templates)")
-parser.add_argument("-c", "--custom-templates", default="componentGenerator/custom_templates", help="Path to the custom templates directory (default: componentGenerator/custom_templates)")
-parser.add_argument("-o", "--output", default="components", help="Path to the output directory (default: components)")
+parser.add_argument("-o", "--output", default="output/final.yaml", help="Path to the output file (default: output/final.yaml)")
 
-def to_nice_yaml(value, indent=2, explicit_end=True):
-    out = yaml.dump(value, indent=indent, default_flow_style=False, sort_keys=False, explicit_end=False)
-    return out.strip().replace('...', '')  # Remove doc end
+# Global registry to collect auto-collected sections
+global_registry = ["interval", "globals", "script"] # Add more sections as needed
+
+# Component registration
+registered_components = []
+
+class IndentDumper(yaml.SafeDumper):
+    def increase_indent(self, flow=False, indentless=False):
+        return super().increase_indent(flow, False)  # force indenting lists
+
+class LiteralStr(str):
+    pass
+
+def literal_str_representer(dumper, data):
+    return dumper.represent_scalar('tag:yaml.org,2002:str', data, style='|')
+
+class TaggedScalar:
+    def __init__(self, tag, value):
+        self.tag = tag
+        self.value = value
+
+    def __repr__(self):
+        return f"{self.tag} {self.value!r}"
+    
+def unknown_tag_constructor(loader, tag_suffix, node):
+    value = loader.construct_scalar(node)
+    return TaggedScalar(f"!{tag_suffix}", value)
+
+def tagged_scalar_representer(dumper, data):
+    return dumper.represent_scalar(data.tag, data.value)
+
+yaml.SafeLoader.add_multi_constructor('!', unknown_tag_constructor)
+
+for dumper in (yaml.SafeDumper, IndentDumper):
+    yaml.add_representer(LiteralStr, literal_str_representer, Dumper=dumper)
+    yaml.add_representer(TaggedScalar, tagged_scalar_representer, Dumper=dumper)
+# yaml.add_representer(TaggedScalar, tagged_scalar_representer, Dumper=yaml.SafeDumper)
+# yaml.add_representer(LiteralStr, literal_str_representer, Dumper=yaml.SafeDumper)
+# yaml.add_representer(LiteralStr, literal_str_representer, Dumper=IndentDumper)
+
+def lambda_multiline_body(s):
+    lines = s.strip("\n").splitlines()
+
+    # Skip empty lines and find the first non-empty line's indentation
+    for line in lines:
+        if line.strip():  # line has non-space content
+            match = re.match(r'^[ \t]*', line)
+            base_indent = match.group(0)
+            break
+    else:
+        return ""  # All lines are empty
+
+    # Compile regex to strip this exact indentation
+    pattern = re.compile(rf'^{re.escape(base_indent)}')
+    dedented = [pattern.sub('', line) if line.startswith(base_indent) else line for line in lines]
+
+    s = "\n".join(dedented)
+    s = s.strip()
+
+    return LiteralStr(s)
+
+def register_component(id=None, auto_collected=None):
+    if auto_collected is None:
+        auto_collected = {}
+    registered_components.append({
+        "id": id,
+        "auto_collected": auto_collected
+    })
+    print(f"[✓] Registered component: {id}")
+
+def collect_section(section):
+    merged = []
+    for comp in registered_components:
+        part = comp["auto_collected"].get(section)
+        if part:
+            merged.extend(part)
+    return merged
+
+def render_main_template(env, template_name, context):
+    template = env.get_template(template_name)
+    return template.render(**context)
+
+def register_all_macros(env, templates_dir):
+    """
+    Automatically registers all macros from .j2 files in the templates directory as globals.
+    """
+    print(f"Registering macros from templates in {templates_dir}")
+    for template_path in Path(templates_dir).glob("*.j2"):
+        template = env.get_template(template_path.name)
+        # Iterate over all attributes in the template module
+        for attr_name in dir(template.module):
+            attr = getattr(template.module, attr_name)
+            # Only add callable macros (skip private and built-ins)
+            if callable(attr) and not attr_name.startswith("_"):
+                env.globals[attr_name] = attr
+                print(f"[✓] Registering macro: {attr_name}")
 
 def main():
     args = parser.parse_args()
 
-    base_output_dir = args.output
-    template_dir = args.templates
-    custom_template_dir = args.custom_templates
+    templates_dir = args.templates
+    output_file = args.output
+    main_template_file = args.file
+    main_template_file_parent = Path(main_template_file).parent
 
-    os.makedirs(base_output_dir, exist_ok=True)
-    env = Environment(loader=FileSystemLoader([template_dir, custom_template_dir]))
-    env.filters['to_nice_yaml'] = to_nice_yaml
+    print(f"Registring templates recursively from: {templates_dir}")
 
-    with open(args.file) as f:
-        config = yaml.safe_load(f)
+    output_dir = Path(output_file).parent
 
-    defaults = config.get("defaults", {})
-    components = [apply_inheritance(c, defaults) for c in config["components"]]
+    # Recursively collect all directories under templates_dir for Jinja2 loader
+    templates_dir = Path(args.templates).resolve()
 
-    registry = build_template_registry(template_dir, env)
-    validate_components(components, registry, custom_template_dir)
+    # Recursively collect all directories under templates_dir, including itself
+    all_template_dirs = set()
+    for root, _, _ in os.walk(templates_dir):
+        all_template_dirs.add(Path(root))
 
-    for comp in components:
-        process_component(comp, registry, env, base_output_dir, custom_template_dir)
+    all_template_dirs.add(main_template_file_parent)
 
-def load_yaml_string(data):
-    try:
-        return yaml.safe_load(data)
-    except Exception as e:
-        print(f"YAML parse error: {e}")
-        return None
+    env = Environment(
+        loader=FileSystemLoader(all_template_dirs),
+        extensions=["jinja2.ext.do"],
+        trim_blocks=True,
+        lstrip_blocks=True
+    )
+    env.globals.update({
+        "register_component": register_component,
+        "lambda_multiline_body": lambda_multiline_body
+    })
 
-def build_template_registry(template_dir, env):
-    registry = {}
-    for filename in os.listdir(template_dir):
-        match = re.match(r"(?P<type>\w+)_(?P<section>\w+)\.yaml\.j2$", filename)
-        if match:
-            type_ = match.group("type")
-            section = match.group("section")
-            registry.setdefault(type_, {})[section] = env.get_template(filename)
-    return registry
+    # Go over all dirs in template_dirs and register macros
+    for template_dir in all_template_dirs:
+        if template_dir is not main_template_file_parent:
+            register_all_macros(env, template_dir)
 
-def render_component(comp, registry, env, output_dir):
-    comp_id = comp["id"]
-    comp_type = comp["type"]
-    templates = registry.get(comp_type, {})
-    for section, template in templates.items():
-        section_dir = os.path.join(output_dir, section)
-        os.makedirs(section_dir, exist_ok=True)
-        output_path = os.path.join(section_dir, f"{comp_id}.yaml")
-        with open(output_path, "w") as f:
-            rendered = template.render(context=comp)
-            non_empty_lines = [line for line in rendered.splitlines() if line.strip()]
-            f.write('\n'.join(non_empty_lines))
-        print(f"[✓] {section}: {comp_id}")
+    print("\n")
+    print(f"Rendering main template {main_template_file}...")
+    rendered = render_main_template(env, Path(main_template_file).name, {})
 
-def process_component(comp, registry, env, output_dir, custom_template_dir):
-    comp_type = comp["type"]
-    custom_template_path = os.path.join(custom_template_dir, f"{comp_type}.yaml.j2")
-    if os.path.exists(custom_template_path):
-        template = env.get_template(f"{comp_type}.yaml.j2")
-        rendered_yaml = template.render(context=comp)
-        # print the rendered YAML for debugging
-        print(rendered_yaml)
-        parsed = load_yaml_string(rendered_yaml)
-        if parsed and "components" in parsed:
-            for sub in parsed["components"]:
-                process_component(sub, registry, env, output_dir, custom_template_dir)
-    else:
-        render_component(comp, registry, env, output_dir)
+    # Load the user-rendered content
+    parsed_yaml = yaml.safe_load(rendered)
 
-def apply_inheritance(component, defaults):
-    if "extends" in component:
-        base = defaults.get(component["extends"], {}).copy()
-        base.update(component)
-        return base
-    return component
+    # Merge auto-collected sections into the root-level YAML
+    for section in global_registry:
+        parsed_yaml.setdefault(section, [])
+        parsed_yaml[section].extend(collect_section(section))
 
-def validate_components(components, registry, custom_template_dir):
-    ids = set()
-    for comp in components:
-        if "id" not in comp:
-            raise ValueError("Component missing 'id'")
-        if comp["id"] in ids:
-            raise ValueError(f"Duplicate component id: {comp['id']}")
-        ids.add(comp["id"])
-        type_ = comp["type"]
-        if type_ not in registry and not os.path.exists(os.path.join(custom_template_dir, f"{type_}.yaml.j2")):
-            raise ValueError(f"Unknown component type: {type_}")
+    print("\n")
+    print(f"Writing output to {output_file}...")
+    
+    output_dir.mkdir(exist_ok=True)
+    # Write final output
+    with open(output_file, "w") as f:
+        yaml.dump(parsed_yaml, f, Dumper=IndentDumper, indent=2, default_flow_style=False, sort_keys=False)
 
-# ✅ Ensure main only runs when called directly
+    print("Done!")
+
 if __name__ == "__main__":
     main()

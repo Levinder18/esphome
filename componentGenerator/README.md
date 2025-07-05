@@ -20,7 +20,7 @@
 This tool allows you to generate complex [ESPHome](https://esphome.io/) YAML configurations using composable, reusable Jinja2-based component templates. It is designed to help you build and maintain large or dynamic ESPHome projects by enabling modularity and code reuse.
 
 - **Templates**: Write components as Jinja2 macros, making it easy to share and reuse logic.
-- **Auto-collection**: Components can auto-collect YAML sections (like `interval`, `globals`, `script`) and merge them into the final output.
+- **Auto-collection**: Components can auto-collect YAML sections (like `interval`, `globals`, `script`, or any other) and merge them into the final output. The script automatically detects all section names used by components.
 - **Custom Logic**: Use Python helpers (e.g., `lambda_multiline_body`) to write readable, multi-line ESPHome lambdas.
 
 ## Installation
@@ -162,7 +162,7 @@ arc:
 
 1. **Component Registration**: Each component macro calls `register_component`, passing its ID and any auto-collected YAML (e.g., intervals, scripts).
 2. **Rendering**: The main template is rendered, invoking component macros as needed.
-3. **Auto-Collection**: After rendering, the script merges all auto-collected sections (like `interval`, `globals`, `script`) into the root of the final YAML.
+3. **Auto-Collection**: After rendering, the script automatically detects all section names present in the `auto_collected` dictionaries of registered components and merges them into the root of the final YAML. You do not need to maintain a static list of section names.
 4. **Output**: The merged YAML is written to the output file.
 
 ## Adding a New Template
@@ -183,7 +183,7 @@ arc:
 - **Auto-Collection**: Only use auto-collection for sections that must be at the root of the YAML (e.g., `interval`, `globals`, `script`).
 - **No Side Effects**: Macros should not have side effects outside of registration and YAML generation.
 - **Readability**: Use multi-line strings and helpers for clarity.
-- **Extensibility**: Add new global sections to `global_registry` in `generate.py` if needed.
+- **Extensibility**: The script will automatically include any section present in the `auto_collected` dicts of your components and try to merge them to the root of the YAML.
 
 ---
 

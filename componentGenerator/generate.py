@@ -11,9 +11,6 @@ parser.add_argument("-f", "--file", required=True, help="Path to the main yaml t
 parser.add_argument("-t", "--templates", help="Path to additional templates directory")
 parser.add_argument("-o", "--output", default="output/final.yaml", help="Path to the output file (default: output/final.yaml)")
 
-# Global registry to collect auto-collected sections
-global_registry = ["interval", "globals", "script"] # Add more sections as needed
-
 # Component registration
 registered_components = []
 
@@ -159,8 +156,13 @@ def main():
     # Load the user-rendered content
     parsed_yaml = yaml.safe_load(rendered)
 
+    # Dynamically determine all unique section names from auto_collected of registered_components
+    all_sections = set()
+    for comp in registered_components:
+        all_sections.update(comp["auto_collected"].keys())
+
     # Merge auto-collected sections into the root-level YAML
-    for section in global_registry:
+    for section in all_sections:
         parsed_yaml.setdefault(section, [])
         parsed_yaml[section].extend(collect_section(section))
 

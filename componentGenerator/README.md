@@ -45,7 +45,7 @@ python generate.py -f main.yaml.j2 -o ../output/final.yaml
 
 - `-f`: Path to your main Jinja2 YAML template.
 - `-o`: Output path for the generated YAML (default: `output/final.yaml`).
-- `-t`: (Optional) Path to the templates directory (default: `componentGenerator/templates`).
+- `-t`: (Optional) Path to an additional templates directory. The default templates in `componentGenerator/templates` are always included.
 
 Your main template can use component macros, e.g.:
 

@@ -1,6 +1,6 @@
 
 FILE ?= componentGenerator/main.yaml.j2
-TEMPLATES ?= componentGenerator/templates
+TEMPLATES ?= ""
 OUTPUT ?= ./output/final.yaml
 
 .PHONY: generate-components install-component-generator

@@ -8,7 +8,7 @@ from jinja2 import Environment, FileSystemLoader
 # --- Argument parsing ---
 parser = argparse.ArgumentParser(description="Generate esphome yaml from template with composable components.")
 parser.add_argument("-f", "--file", required=True, help="Path to the main yaml template.")
-parser.add_argument("-t", "--templates", default="componentGenerator/templates", help="Path to the templates directory (default: componentGenerator/templates)")
+parser.add_argument("-t", "--templates", help="Path to additional templates directory")
 parser.add_argument("-o", "--output", default="output/final.yaml", help="Path to the output file (default: output/final.yaml)")
 
 # Global registry to collect auto-collected sections
@@ -108,27 +108,33 @@ def register_all_macros(env, templates_dir):
                 env.globals[attr_name] = attr
                 print(f"[✓] Registering macro: {attr_name}")
 
+
+
 def main():
     args = parser.parse_args()
 
-    templates_dir = args.templates
+    templates_dir = None
+    if args.templates:
+        templates_dir = Path(args.templates).resolve()
+    # Calculate the current file path
+    current_file_directory = Path(__file__).parent
     output_file = args.output
     main_template_file = args.file
     main_template_file_parent = Path(main_template_file).parent
-
-    print(f"Registring templates recursively from: {templates_dir}")
-
     output_dir = Path(output_file).parent
 
-    # Recursively collect all directories under templates_dir for Jinja2 loader
-    templates_dir = Path(args.templates).resolve()
+    templates_sources = [current_file_directory / "templates"]
+    if templates_dir:
+        templates_sources.append(templates_dir)
+    
+    print(f"Registring templates recursively from: {templates_sources}")
 
-    # Recursively collect all directories under templates_dir, including itself
     all_template_dirs = set()
-    for root, _, _ in os.walk(templates_dir):
-        all_template_dirs.add(Path(root))
-
     all_template_dirs.add(main_template_file_parent)
+    for template_dir in templates_sources:
+        # Recursively collect all directories under templates_dir, including itself
+        for root, _, _ in os.walk(template_dir):
+            all_template_dirs.add(Path(root))
 
     env = Environment(
         loader=FileSystemLoader(all_template_dirs),

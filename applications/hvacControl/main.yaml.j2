@@ -113,7 +113,7 @@ sensor:
               - lvgl.resume:
               - lvgl.widget.redraw:
         - logger.log: "Turned clockwise"
-        - script.execute: temperature_arc_increase
+        - script.execute: temperature_meter_increase
     on_anticlockwise:
       then:
         - if:
@@ -124,7 +124,7 @@ sensor:
               - lvgl.resume:
               - lvgl.widget.redraw:
         - logger.log: "Turned anti-clockwise"
-        - script.execute: temperature_arc_decrease
+        - script.execute: temperature_meter_decrease
 
 spi:
   id: spi_bus
@@ -285,6 +285,16 @@ display:
       - delay 50ms
 {% endif %}
 
+font: 
+  - file: "gfonts://Material+Symbols+Outlined"
+    id: icons_28
+    size: 28
+    glyphs: [
+      "\U0000e333", # TV
+      "\U0000ea45", # King Bed
+      "\U0000eb47" # Kitchen 
+    ]
+
 time:
   - platform: homeassistant
     id: homeassistant_time
@@ -343,6 +353,7 @@ lvgl:
     touchscreens:
       - touch
     buffer_size: 100%
+    bg_color: Black
 {% if not local_run %}
     encoders:
       sensor: encoder
@@ -367,7 +378,7 @@ lvgl:
             animation: OUT_TOP
             time: 300ms
         on_swipe_down:
-          lvgl.page.next:
+          lvgl.page.previous:
             animation: OUT_BOTTOM
             time: 300ms
         width: 100%
@@ -388,9 +399,11 @@ lvgl:
                   column: 0
                   row: 0
                   widgets: 
+                    {#
                     - {{ arc_countdown("arc1", duration=5000) | indent(22) }}
                         width: 480
                         height: 480
+                    #}
                     - label:
                         id: coord_text
                         align: CENTER
@@ -405,6 +418,25 @@ lvgl:
                         align: CENTER
                         text_align: CENTER
                         text: "This is the second tile"
+      {#
+      - id: test_page
+        on_load:
+          then:
+            - logger.log: "🚀 test page loaded!"
+        on_swipe_up:
+          lvgl.page.next:
+            animation: OUT_TOP
+            time: 300ms
+        on_swipe_down:
+          lvgl.page.previous:
+            animation: OUT_BOTTOM
+            time: 300ms
+        width: 100%
+        bg_color: Black
+        widgets:
+          - {{ temperature_meter("temperature_meter", initial_value='25.0') | indent(12) }}
+      #}
+
       - id: third_page
         on_load:
           then:
@@ -414,11 +446,11 @@ lvgl:
             animation: OUT_TOP
             time: 300ms
         on_swipe_down:
-          lvgl.page.next:
+          lvgl.page.previous:
             animation: OUT_BOTTOM
             time: 300ms
         width: 100%
         bg_color: Black
         widgets:
-          - {{ temperature_arc("temperature_arc", initial_value='16', arc_color="Red", bg_color="Blue") | indent(12) }}
-          - {{ room_header("living_room", text="Living Room") | indent(12) }}
+          - {{ temperature_meter("temperature_meter", initial_value='25.0') | indent(12) }}
+          - {{ room_header("living_room", text="Living Room", icon="\ue333") | indent(12) }}

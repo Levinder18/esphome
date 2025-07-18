@@ -1,0 +1,212 @@
+{#
+  TemperatureMeter Component Macro for SVGL/LVGL UI
+  Displays a circular meter showing the current target temperature, with an overlay label for the value.
+#}
+{% macro temperature_meter(id, initial_value, meter_width=450, meter_height=450, bg_color=Black) %}
+{% set auto = {
+    "globals": [
+        {    
+            'id': id ~ '_meter_value',
+            'type': 'float',
+            'initial_value': initial_value
+        }
+    ],
+    "script": [
+        {
+            'id': id ~ '_increase',
+            'then': [
+                {
+                    'if': {
+                        'condition': {
+                            'lambda': 'return id(' ~ id ~ '_meter_value) < 30;'
+                        },
+                        'then': [
+                            { 'logger.log': 'Increasing meter ' ~ id },
+                            {
+                                'script.execute': {
+                                    'id': id ~ '_set',
+                                    'value': '!lambda return id(' ~ id ~ '_meter_value) + 0.5;'
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            'id': id ~ '_decrease',
+            'then': [
+                {
+                    'if': {
+                        'condition': {
+                            'lambda': 'return id(' ~ id ~ '_meter_value) > 20;'
+                        },
+                        'then': [
+                            { 'logger.log': 'Decreasing meter ' ~ id },
+                            {
+                                'script.execute': {
+                                    'id': id ~ '_set',
+                                    'value': '!lambda return id(' ~ id ~ '_meter_value) - 0.5;'
+                                }
+                            }
+                        ]
+                    }
+                }
+            ]
+        },
+        {
+            'id': id ~ '_set_value',
+            'parameters': {
+                'value': 'float'
+            },
+            'then': [
+                { 'logger.log': {
+                    'format': 'Setting meter ' ~ id ~ 'value to %.1f',
+                    'args': [ 'value' ]
+                    }
+                },
+                {
+                    'lvgl.indicator.update': {
+                        'id': id ~ '_tick_style_lower',
+                        'end_value': '!lambda ' ~ lambda_multiline_body('''
+                            if (id(' ~ id ~ '_meter_value) * 2 < 50) {
+                                return id(' ~ id ~ '_meter_value) * 2;
+                            } else {
+                                return 50;
+                            }
+                        ''')
+                    }
+                },
+                {
+                    'lvgl.indicator.update': {
+                        'id': id ~ '_tick_style_higher',
+                        'start_value': '!lambda ' ~ lambda_multiline_body('''
+                            if (id(' ~ id ~ '_meter_value) * 2 > 50) {
+                                return 50;
+                            } else {
+                                return 0;
+                            }
+                        '''),
+                        'end_value': '!lambda ' ~ lambda_multiline_body('''
+                            if (id(' ~ id ~ '_meter_value) * 2 > 50) {
+                                return id(' ~ id ~ '_meter_value) * 2;
+                            } else {
+                                return 0;
+                            }
+                        ''')
+                    }
+                }
+            ]
+        },
+        {
+            'id': id ~ '_set_global_and_label',
+            'parameters': {
+                'value': 'float'
+            },
+            'then': [
+                { 'logger.log': {
+                        'format': 'Setting meter ' ~ id ~ ' global and label to %.1f',
+                        'args': [ 'value' ]
+                    }
+                },
+                {
+                    'globals.set': {
+                        'id': id ~ '_meter_value',
+                        'value': '!lambda return value;'
+                    }
+                },
+                {
+                    'lvgl.label.update': {
+                        'id': id ~ '_value',
+                        'text': '!lambda return str_sprintf("%.1f", id(' ~ id ~ '_meter_value));'
+                    }
+                }
+            ]
+        },
+        {
+            'id': id ~ '_set',
+            'parameters': {
+                'value': 'float'
+            },
+            'then': [
+                {
+                    'script.execute': {
+                        'id': id ~ '_set_global_and_label',
+                        'value': '!lambda return value;'
+                    }
+                },
+                {
+                    'script.execute': {
+                        'id': id ~ '_set_value',
+                        'value': '!lambda return value;'
+                    }
+                }
+            ]
+        },
+    ]
+} %}
+{% do register_component(id=id, auto_collected=auto) %}
+obj:
+  width: 100%
+  height: 100%
+  bg_color: Black
+  border_width: 0
+  widgets:
+    - meter:
+        id: {{ id }}
+        align: center
+        width: {{ meter_width }}
+        height: {{ meter_height }}
+        {% if bg_color %}
+        bg_color: {{ bg_color }}
+        {% endif %}
+        pad_all: 0
+        border_width: 0
+        bg_opa: 0
+        text_color: White
+        scales:
+            range_from: 40
+            range_to: 60
+            angle_range: 240
+            rotation: 150
+            ticks:
+                count: 21
+                length: 20
+                width: 50
+            indicators:
+                - tick_style:
+                    id: {{ id }}_tick_style_lower
+                    start_value: 40
+                    end_value: !lambda |-
+                        if (id({{ id }}_meter_value) * 2 < 50) {
+                            return id({{ id }}_meter_value) * 2;
+                        } else {
+                            return 50;
+                        }
+                    local: true
+                    color_start: 0x342cd3 #342cd3
+                    color_end: 0x05005d #05005d
+                - tick_style:
+                    id: {{ id }}_tick_style_higher
+                    start_value: !lambda |-
+                        if (id({{ id }}_meter_value) * 2 > 50) {
+                            return 50;
+                        } else {
+                            return 0;
+                        }
+                    end_value: !lambda |-
+                        if (id({{ id }}_meter_value) * 2 > 50) {
+                            return id({{ id }}_meter_value) * 2;
+                        } else {
+                            return 0;
+                        }
+                    local: true
+                    color_start: 0x05005d #05005d
+                    color_end: 0x770101 #770101
+    - label:
+        id: {{ id }}_value
+        text: "{{ initial_value }}\u00B0"
+        align: CENTER
+        text_color: White
+        text_font: montserrat_48
+{% endmacro %}

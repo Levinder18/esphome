@@ -14,9 +14,23 @@ parser.add_argument("-o", "--output", default="output/final.yaml", help="Path to
 # Component registration
 registered_components = []
 
+
 class IndentDumper(yaml.SafeDumper):
     def increase_indent(self, flow=False, indentless=False):
         return super().increase_indent(flow, False)  # force indenting lists
+
+# Custom representer for str to handle values starting with '!'
+def custom_str_representer(dumper, data):
+    if isinstance(data, str) and data.startswith("!"):
+        # Split the tag and value
+        if " " in data:
+            tag, value = data.split(" ", 1)
+        elif "\n" in data:
+            tag, value = data.split("\n", 1)
+        else:
+            tag, value = data, ""
+        return dumper.represent_scalar(tag, value.lstrip())
+    return dumper.represent_scalar('tag:yaml.org,2002:str', data)
 
 class LiteralStr(str):
     pass
@@ -41,12 +55,11 @@ def tagged_scalar_representer(dumper, data):
 
 yaml.SafeLoader.add_multi_constructor('!', unknown_tag_constructor)
 
+
 for dumper in (yaml.SafeDumper, IndentDumper):
     yaml.add_representer(LiteralStr, literal_str_representer, Dumper=dumper)
     yaml.add_representer(TaggedScalar, tagged_scalar_representer, Dumper=dumper)
-# yaml.add_representer(TaggedScalar, tagged_scalar_representer, Dumper=yaml.SafeDumper)
-# yaml.add_representer(LiteralStr, literal_str_representer, Dumper=yaml.SafeDumper)
-# yaml.add_representer(LiteralStr, literal_str_representer, Dumper=IndentDumper)
+    yaml.add_representer(str, custom_str_representer, Dumper=dumper)
 
 def lambda_multiline_body(s):
     lines = s.strip("\n").splitlines()
@@ -154,7 +167,12 @@ def main():
     rendered = render_main_template(env, Path(main_template_file).name, {})
 
     # Load the user-rendered content
-    parsed_yaml = yaml.safe_load(rendered)
+    try:
+        parsed_yaml = yaml.safe_load(rendered)
+    except yaml.YAMLError as e:
+        print(f"Complete YAML content:\n{rendered}")
+        print(f"Error parsing YAML: {e}")
+        return
 
     # Dynamically determine all unique section names from auto_collected of registered_components
     all_sections = set()

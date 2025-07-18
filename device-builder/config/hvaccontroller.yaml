@@ -1,0 +1,32 @@
+esphome:
+  name: hvaccontroller
+  friendly_name: HvacController
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: esp-idf
+
+# Enable logging
+logger:
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "Qc5H+mSSPG0q3wj0JpaBVhPZx250NUIx8kAc3lJnwgo="
+
+ota:
+  - platform: esphome
+    password: "5a2acdb39c323ab0720dc921560dc0b5"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Hvaccontroller Fallback Hotspot"
+    password: "rh2WHXSYMT7o"
+
+captive_portal:
+    

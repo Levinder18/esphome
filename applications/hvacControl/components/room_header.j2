@@ -1,0 +1,38 @@
+{#
+  RoomHeader Component Macro for SVGL/LVGL UI
+  Displays the room name and optional icon as a header for each room screen.
+  Usage: {{ room_header(id, text, icon=None, font=None, align=None) }}
+#}
+{% macro room_header(id, text, icon=None, font=None, align=None) %}
+{% do register_component(id=id) %}
+obj:
+  x: 160
+  y: 30
+  width: 100
+  height: 50
+  widgets:
+    {% if text %}
+    - label:
+        id: {{ id }}
+        text: "{{ text }}"
+        {% if font %}
+        font: {{ font }}
+        {% endif %}
+        {% if align %}
+        align: {{ align }}
+        {% else %}    
+        align: CENTER
+        {% endif %}
+    {% endif %}
+    {% if icon %}
+    - label:
+        id: {{ id }}_icon
+        text: "{{ icon }}"
+        {% if font %}
+        font: {{ font }}
+        {% endif %}
+        {% if align %}
+        align: TOP
+        {% endif %}
+    {% endif %}
+{% endmacro %}

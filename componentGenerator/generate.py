@@ -11,9 +11,11 @@ parser.add_argument("-f", "--file", required=True, help="Path to the main yaml t
 parser.add_argument("-t", "--templates", help="Path to additional templates directory")
 parser.add_argument("-o", "--output", default="output/final.yaml", help="Path to the output file (default: output/final.yaml)")
 
+class MacroNamespace:
+    pass
+
 # Component registration
 registered_components = []
-
 
 class IndentDumper(yaml.SafeDumper):
     def increase_indent(self, flow=False, indentless=False):
@@ -54,6 +56,7 @@ def tagged_scalar_representer(dumper, data):
     return dumper.represent_scalar(data.tag, data.value)
 
 yaml.SafeLoader.add_multi_constructor('!', unknown_tag_constructor)
+# yaml.SafeLoader.add_multi_constructor('|', literal_str_representer)
 
 
 for dumper in (yaml.SafeDumper, IndentDumper):
@@ -103,22 +106,56 @@ def render_main_template(env, template_name, context):
     template = env.get_template(template_name)
     return template.render(**context)
 
-def register_all_macros(env, templates_dir):
+def collect_all_macros(env, template_dirs):
     """
-    Automatically registers all macros from .j2 files in the templates directory as globals.
+    Collect all macros from all .j2 files in all template_dirs.
+    Returns a dict: {macro_name: macro_callable}
     """
-    print(f"Registering macros from templates in {templates_dir}")
-    for template_path in Path(templates_dir).glob("*.j2"):
-        template = env.get_template(template_path.name)
-        # Iterate over all attributes in the template module
-        for attr_name in dir(template.module):
-            attr = getattr(template.module, attr_name)
-            # Only add callable macros (skip private and built-ins)
-            if callable(attr) and not attr_name.startswith("_"):
-                env.globals[attr_name] = attr
-                print(f"[✓] Registering macro: {attr_name}")
+    all_macros = {}
+    for template_dir in template_dirs:
+        print(f"Registering macros from templates in {template_dir}")
+        for template_path in Path(template_dir).glob("*.j2"):
+            template = env.get_template(template_path.name)
+            for attr_name in dir(template.module):
+                attr = getattr(template.module, attr_name)
+                if callable(attr) and not attr_name.startswith("_"):
+                    all_macros[attr_name] = attr
+                    print(f"[✓] Found macro: {attr_name}")
+    return all_macros
 
+def wrap_macro(macro_func, all_macros):
+    def wrapped_macro(*args, **kwargs):
+        for name, func in all_macros.items():
+            if name not in kwargs:
+                kwargs[name] = func
+        return macro_func(*args, **kwargs)
+    return wrapped_macro
 
+def generate_dispatch_lambda(script_names):
+    lines = []
+    lines.append('if (false) {}')  # trick to simplify `else if` chains
+
+    for script in script_names:
+        # Prepare param list string for call
+        lines.append(f'else if (name == "{script}") {{')
+        lines.append(f'  id({script}).execute();')
+        lines.append('  return;')
+        lines.append('}')
+    lines.append('ESP_LOGW("dispatcher", "Unknown script name: %s", name.c_str());')
+    return '\n'.join(lines)
+
+def generate_script_dispatcher(scripts):
+    supported_script_names = [script['id'] for script in scripts if 'parameters' not in script]
+
+    return {
+        'id': 'script_dispatcher',
+        'parameters': {'name': 'std::string'},
+        'then': [
+            {
+                'lambda': lambda_multiline_body(generate_dispatch_lambda(supported_script_names))
+            }
+        ]
+    }
 
 def main():
     args = parser.parse_args()
@@ -157,10 +194,17 @@ def main():
         "lambda_multiline_body": lambda_multiline_body
     })
 
-    # Go over all dirs in template_dirs and register macros
-    for template_dir in all_template_dirs:
-        if template_dir is not main_template_file_parent:
-            register_all_macros(env, template_dir)
+    # --- NEW: Collect and wrap all macros ---
+    all_macros = collect_all_macros(env, [dir for dir in all_template_dirs if dir is not main_template_file_parent])
+    # wrapped_macros = {name: wrap_macro(func, all_macros) for name, func in all_macros.items()}
+    # env.globals.update(wrapped_macros)
+    env.globals.update(all_macros.items())
+
+    macro_ns = MacroNamespace()
+    for name, func in all_macros.items():
+        setattr(macro_ns, name, func)
+
+    env.globals['macros'] = macro_ns
 
     print("\n")
     print(f"Rendering main template {main_template_file}...")
@@ -183,6 +227,9 @@ def main():
     for section in all_sections:
         parsed_yaml.setdefault(section, [])
         parsed_yaml[section].extend(collect_section(section))
+
+    # Add the dispatcher
+    parsed_yaml['script'].append(generate_script_dispatcher(parsed_yaml['script']))
 
     print("\n")
     print(f"Writing output to {output_file}...")

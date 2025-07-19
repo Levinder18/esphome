@@ -1,4 +1,4 @@
-{% set local_run = true %}
+{% set local_run = false %}
 
 substitutions:
   name: "hvaccontroller"
@@ -29,6 +29,12 @@ esp32:
       CONFIG_ESP32S3_DATA_CACHE_64KB: y
       CONFIG_SPIRAM_FETCH_INSTRUCTIONS: y
       CONFIG_SPIRAM_RODATA: y
+      # Those help boost the FPS by ~10
+      CONFIG_COMPILER_OPTIMIZATION_PERF: y
+      CONFIG_LV_ATTRIBUTE_FAST_MEM_USE_IRAM: y
+      CONFIG_ESP_MAIN_TASK_AFFINITY_CPU1: y
+      CONFIG_LV_MEMCPY_MEMSET_STD: y
+      CONFIG_LV_DISP_DEF_REFR_PERIOD: '10'
 
 psram:
   speed: 80MHz
@@ -78,6 +84,9 @@ binary_sensor:
     pin: 
       number: GPIO14
       inverted: true
+    on_click:
+      then:
+        - logger.log: "Button clicked!"
 
 i2c:
   - id: i2c_bus
@@ -113,7 +122,11 @@ sensor:
               - lvgl.resume:
               - lvgl.widget.redraw:
         - logger.log: "Turned clockwise"
-        - script.execute: temperature_meter_increase
+        - if:
+            condition: 
+              lambda: return id(current_control) == "hvac";
+            then:
+              - lambda: id(script_dispatcher).execute(str_sprintf("%s_temperature_meter_increase",id(current_room).c_str()));
     on_anticlockwise:
       then:
         - if:
@@ -124,7 +137,11 @@ sensor:
               - lvgl.resume:
               - lvgl.widget.redraw:
         - logger.log: "Turned anti-clockwise"
-        - script.execute: temperature_meter_decrease
+        - if:
+            condition: 
+              lambda: return id(current_control) == "hvac";
+            then:
+              - lambda: id(script_dispatcher).execute(str_sprintf("%s_temperature_meter_decrease",id(current_room).c_str()));
 
 spi:
   id: spi_bus
@@ -140,16 +157,6 @@ touchscreen:
 {% if local_run %}
   id: touch
   platform: sdl
-  # on_update:
-  #     - lvgl.label.update:
-  #         id: coord_text
-  #         text: !lambda return str_sprintf("Touch points:\n id=%d x=%d, y=%d", touches[0].id, touches[0].x, touches[0].y);
-  #     - lambda: |-
-  #         for (auto touch: touches)  {
-  #             if (touch.state <= 2) {
-  #               ESP_LOGI("Touch points:", "id=%d x=%d, y=%d", touch.id, touch.x, touch.y);
-  #             }
-  #         }
 {% else %}
 touchscreen:
   platform: cst826
@@ -285,6 +292,7 @@ display:
       - delay 50ms
 {% endif %}
 
+# TODO: Move to the component auto collected globals
 font: 
   - file: "gfonts://Material+Symbols+Outlined"
     id: icons_28
@@ -294,6 +302,10 @@ font:
       "\U0000ea45", # King Bed
       "\U0000eb47" # Kitchen 
     ]
+
+{% set TV_ICON="\ue333" %}
+{% set KING_BED_ICON="\uea45" %}
+{% set KITCHEN_ICON="\ueb47" %}
 
 time:
   - platform: homeassistant
@@ -308,42 +320,120 @@ time:
     #             id: device_last_restart
     #             state: !lambda 'return id(homeassistant_time).now().strftime("%a %d %b %Y - %I:%M:%S %p");'
 
-    # Update the clock every second
-    # on_time:
-    #   - seconds: "*"
-    #     then:
-    #       - script.execute: arc_update
+globals:
+  - id: current_control
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+  - id: current_room
+    type: std::string
+    restore_value: no
+    initial_value: '""'
 
-script:
-#   - id: arc_update
-#     then:
-#       - lvgl.arc.update:
-#           id: arc_id
-#           value: !lambda |-
-#             return (lv_arc_get_value(arc_id) + 1) % 5;
-  # - id: next_page
-  #   then:
-  #     - lvgl.page.next:
-  - id: arc1_done
+{#
+# FPS Count
+globals:
+  - id: frame_count
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: fps
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+interval:
+  - interval: 16ms
     then:
-      - logger.log: "Countdown 1 completed!"
+      - lambda: |-
+          id(frame_count)++;
+  - interval: 1s
+    then:
+      - lambda: |-
+          id(fps) = id(frame_count);
+          id(frame_count) = 0;
+          ESP_LOGI("fps", "FPS: %d", id(fps));
+#}
 
-# globals:
-#   - id: current_arc_value
-#     type: int
-#     initial_value: '0'
+{#
+interval:
+  - !include components/interval/arc_countdown1_controller.yaml
+  - interval: 500ms
+    then:
+      - lambda: |-
+          // Smoothly increment current_arc_value towards target
+          id(current_arc_value) = (id(current_arc_value) + 1) % 10;
+          lv_arc_set_value(id(arc_id), id(current_arc_value));
+  - interval: 5000ms
+    then:
+      lvgl.page.next:
+#}
 
-# interval:
-  # - !include components/interval/arc_countdown1_controller.yaml
-  # - interval: 500ms
-  #   then:
-  #     - lambda: |-
-  #         // Smoothly increment current_arc_value towards target
-  #         id(current_arc_value) = (id(current_arc_value) + 1) % 10;
-  #         lv_arc_set_value(id(arc_id), id(current_arc_value));
-  # - interval: 5000ms
-  #   then:
-  #     lvgl.page.next:
+{% macro generate_swap_events_handlers(page_id) %}
+{% set page_groups = [['main_page', 'test_page'], ['hvac_controller_bedroom', 'hvac_controller_living_room']] %}
+on_swipe_right:
+  lvgl.page.previous:
+    animation: MOVE_RIGHT
+    time: 300ms
+on_swipe_left:
+  lvgl.page.next:
+    animation: MOVE_LEFT
+    time: 300ms
+on_swipe_up:
+  - lambda: |-
+{% for group in page_groups if page_id in group %}
+  {% for page in group %}
+      id({{ page }}).skip = true;
+  {% endfor %}
+{% endfor %}
+
+{% set next_group_idx = 0 %}
+{% for group in page_groups %}
+  {% if page_id in group %}
+    {% set next_group_idx = loop.index-2 %}
+    {% if next_group_idx < 0 %}
+      {% set next_group_idx = 1 %}
+    {% endif %}
+    {% for page in page_groups[next_group_idx] %}
+      id({{ page }}).skip = false;
+    {% endfor %}
+  {% endif %}
+{% endfor %}
+  - lvgl.page.next:
+      animation: OUT_TOP
+      time: 300ms
+on_swipe_down:
+  - lambda: |-
+{% for group in page_groups if page_id in group %}
+  {% for page in group %}
+      id({{ page }}).skip = true;
+  {% endfor %}
+{% endfor %}
+
+{% for group in page_groups %}
+  {% if page_id in group %}
+    {% set prev_group_idx = loop.index %}
+    {% if prev_group_idx > 1 %}
+      {% set prev_group_idx = 0 %}
+    {% endif %}
+    {% for page in page_groups[prev_group_idx] %}
+      id({{ page }}).skip = false;
+    {% endfor %}
+  {% endif %}
+{% endfor %}
+  - lvgl.page.previous:
+      animation: OUT_BOTTOM
+      time: 300ms
+{% endmacro %}
+
+{% macro generate_on_load_globals_set(control, room) %}
+- globals.set:
+    id: current_control
+    value: '"{{ control }}"'
+- globals.set:
+    id: current_room
+    value: '"{{ room }}"'
+{% endmacro %}
 
 # LVGL Configuration
 lvgl:
@@ -354,8 +444,13 @@ lvgl:
       - touch
     buffer_size: 100%
     bg_color: Black
+    theme:
+      obj:
+        pad_all: 0
+        border_width: 0
 {% if not local_run %}
     encoders:
+      group: empty
       sensor: encoder
       enter_button: front_button
     on_idle:
@@ -373,84 +468,52 @@ lvgl:
         on_load:
           then:
             - logger.log: "🚀 main page loaded!"
-        on_swipe_up:
-          lvgl.page.next:
-            animation: OUT_TOP
-            time: 300ms
-        on_swipe_down:
-          lvgl.page.previous:
-            animation: OUT_BOTTOM
-            time: 300ms
+            {{ generate_on_load_globals_set('', '') | indent(12) }}
+        {{ generate_swap_events_handlers('main_page') | indent(8) }}
         width: 100%
         bg_color: Black
         widgets:
-          - tileview:
-              id: main_tileview
-              width: 480
-              height: 480
-              on_value:
-                - if:
-                    condition:
-                      lambda: return tile == id(tile1);
-                    then:
-                      - logger.log: "tile1 is now showing"
-              tiles:
-                - id: tile1
-                  column: 0
-                  row: 0
-                  widgets: 
-                    {#
-                    - {{ arc_countdown("arc1", duration=5000) | indent(22) }}
-                        width: 480
-                        height: 480
-                    #}
-                    - label:
-                        id: coord_text
-                        align: CENTER
-                        text_align: CENTER
-                        text: 'Touch the screen'
-                - id: tile2
-                  column: 1
-                  row: 0
-                  bg_color: LightBlue
-                  widgets:
-                    - label:
-                        align: CENTER
-                        text_align: CENTER
-                        text: "This is the second tile"
-      {#
+          - label:
+              id: coord_text
+              align: CENTER
+              text_align: CENTER
+              text: 'Touch the screen'
+              text_color: White
       - id: test_page
         on_load:
           then:
             - logger.log: "🚀 test page loaded!"
-        on_swipe_up:
-          lvgl.page.next:
-            animation: OUT_TOP
-            time: 300ms
-        on_swipe_down:
-          lvgl.page.previous:
-            animation: OUT_BOTTOM
-            time: 300ms
+            {{ generate_on_load_globals_set('', '') | indent(12) }}
+        {{ generate_swap_events_handlers('test_page') | indent(8) }}
         width: 100%
         bg_color: Black
         widgets:
-          - {{ temperature_meter("temperature_meter", initial_value='25.0') | indent(12) }}
-      #}
+          - label:
+              id: test_label
+              align: CENTER
+              text_align: CENTER
+              text: 'Test Page'
+              text_color: White
 
-      - id: third_page
+      - id: hvac_controller_living_room
+        skip: true
         on_load:
           then:
-            - logger.log: "🚀 third page loaded!"
-        on_swipe_up:
-          lvgl.page.next:
-            animation: OUT_TOP
-            time: 300ms
-        on_swipe_down:
-          lvgl.page.previous:
-            animation: OUT_BOTTOM
-            time: 300ms
+            - logger.log: "hvac_controller_living_room page loaded"
+            {{ generate_on_load_globals_set('hvac', 'living_room') | indent(12) }}
+        {{ generate_swap_events_handlers('hvac_controller_living_room') | indent(8) }}
         width: 100%
         bg_color: Black
         widgets:
-          - {{ temperature_meter("temperature_meter", initial_value='25.0') | indent(12) }}
-          - {{ room_header("living_room", text="Living Room", icon="\ue333") | indent(12) }}
+          - {{ room_hvac_controller("living_room", title="Living Room", room_icon=TV_ICON, macros=macros) | indent(12) }}
+      - id: hvac_controller_bedroom
+        skip: true
+        on_load:
+          then:
+            - logger.log: "hvac_controller_bedroom page loaded"
+            {{ generate_on_load_globals_set('hvac', 'bedroom') | indent(12) }}
+        {{ generate_swap_events_handlers('hvac_controller_bedroom') | indent(8) }}
+        width: 100%
+        bg_color: Black
+        widgets:
+          - {{ room_hvac_controller("bedroom", title="Bedroom", room_icon=KING_BED_ICON, macros=macros) | indent(12) }}

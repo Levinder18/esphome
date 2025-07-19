@@ -118,7 +118,7 @@
                 {
                     'lvgl.label.update': {
                         'id': id ~ '_value',
-                        'text': '!lambda return str_sprintf("%.1f", id(' ~ id ~ '_meter_value));'
+                        'text': '!lambda return str_sprintf("%.1f\u00B0", id(' ~ id ~ '_meter_value));'
                     }
                 }
             ]
@@ -150,7 +150,6 @@ obj:
   width: 100%
   height: 100%
   bg_color: Black
-  border_width: 0
   widgets:
     - meter:
         id: {{ id }}

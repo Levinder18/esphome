@@ -1,0 +1,42 @@
+{% macro room_hvac_controller(id, title=None, room_icon=None, macros=None) %}
+
+{% set auto = {
+    'font': [
+        {
+            'file': "gfonts://Material+Symbols+Outlined",
+            'id': id ~ '_icons_48',
+            'size': 48,
+            'glyphs': [
+                "\U0000e8ac",
+                "\U0000f168",
+                "\U0000f16a",
+                "\U0000f166",
+                "\U0000f69b"
+            ]
+        }
+    ]
+} %}
+
+{% set POWER_SETTINGS_ICON="\ue8ac" %}
+{% set MODE_FAN_ICON="\uf168" %}
+{% set MODE_HEAT_ICON="\uf16a" %}
+{% set MODE_COOL_ICON="\uf166" %}
+{% set ARROW_RANGE_ICON="\uf69b" %}
+
+{% do register_component(id=id, auto_collected=auto) %}
+obj:
+  width: 100%
+  height: 100%
+  bg_color: Black
+  widgets:
+    - {{ macros.temperature_meter(id ~ "_temperature_meter", initial_value='25.0') | indent(6) }}
+    - {{ macros.room_header(id ~ "_header", text=title, icon=room_icon) | indent(6) }}
+    - {{ macros.touch_button(id ~ "_hvac_power", icon=POWER_SETTINGS_ICON, icon_font=id ~ '_icons_48') | indent(6) }}
+        y: 140
+        x: -100
+    - {{ macros.touch_button(id ~ "_hvac_mode", icon=MODE_COOL_ICON, icon_font=id ~ '_icons_48') | indent(6) }}
+        y: 140
+    - {{ macros.touch_button(id ~ "_fan", icon=MODE_FAN_ICON, icon_font=id ~ '_icons_48') | indent(6) }}
+        y: 140
+        x: 100
+{% endmacro %}

@@ -1,20 +1,84 @@
-{% macro room_hvac_controller(id, title=None, room_icon=None, macros=None) %}
+{% macro room_hvac_controller(id, title=None, room_icon=None, initial_temperature='25.0', initial_power='false', macros=None) %}
 
 {% set auto = {
-    'font': [
+  'globals': [
+    {    
+      'id': id ~ '_power',
+      'type': 'bool',
+      'initial_value': initial_power
+    }
+  ],
+  'script': [
+    {
+      'id': id ~ '_toggle_power',
+      'then': [
         {
-            'file': "gfonts://Material+Symbols+Outlined",
-            'id': id ~ '_icons_48',
-            'size': 48,
-            'glyphs': [
-                "\U0000e8ac",
-                "\U0000f168",
-                "\U0000f16a",
-                "\U0000f166",
-                "\U0000f69b"
+          'if': {
+            'condition': {
+              'lambda': 'return id(' ~ id ~ '_power) == true;'
+            },
+            'then': [
+              { 'logger.log': 'Powering off ' ~ id },
+              {
+                'globals.set': {
+                  'id': id ~ '_power',
+                  'value': 'false'
+                }
+              },
+            ],
+            'else': [
+              { 'logger.log': 'Powering on ' ~ id },
+              {
+                'globals.set': {
+                  'id': id ~ '_power',
+                  'value': 'true'
+                }
+              },
             ]
+          }
+        },
+        { 'delay': '20ms' },
+        {
+          'script.execute': {
+            'id': id ~ '_temperature_meter_toggle_power',
+            'value': '!lambda return id(' ~ id ~ '_power);'
+          }
+        },
+        {
+          'script.execute': {
+            'id': id ~ '_header_toggle_power',
+            'value': '!lambda return id(' ~ id ~ '_power);'
+          }
+        },
+        {
+          'script.execute': {
+            'id': id ~ '_mode_set_enabled',
+            'value': '!lambda return id(' ~ id ~ '_power);'
+          }
+        },
+        {
+          'script.execute': {
+            'id': id ~ '_fan_set_enabled',
+            'value': '!lambda return id(' ~ id ~ '_power);'
+          }
         }
-    ]
+      ]
+    },
+  ],
+  'font': [
+    {
+      'file': "gfonts://Material+Symbols+Outlined",
+      'id': id ~ '_icons_48',
+      'size': 48,
+      'glyphs': [
+        "\U0000e8ac",
+        "\U0000f168",
+        "\U0000f16a",
+        "\U0000f166",
+        "\U0000f69b"
+      ]
+    }
+  ]
 } %}
 
 {% set POWER_SETTINGS_ICON="\ue8ac" %}
@@ -29,14 +93,12 @@ obj:
   height: 100%
   bg_color: Black
   widgets:
-    - {{ macros.temperature_meter(id ~ "_temperature_meter", initial_value='25.0') | indent(6) }}
-    - {{ macros.room_header(id ~ "_header", text=title, icon=room_icon) | indent(6) }}
-    - {{ macros.touch_button(id ~ "_hvac_power", icon=POWER_SETTINGS_ICON, icon_font=id ~ '_icons_48') | indent(6) }}
+    - {{ macros.temperature_meter(id ~ "_temperature_meter", initial_value=initial_temperature, initial_power=initial_power) | indent(6) }}
+    - {{ macros.room_header(id ~ "_header", text=title, icon=room_icon, initial_power=initial_power) | indent(6) }}
+    - {{ macros.touch_button(id ~ "_mode", enabled=initial_power, icon=MODE_COOL_ICON, icon_font=id ~ '_icons_48') | indent(6) }}
+        x: -60
         y: 140
-        x: -100
-    - {{ macros.touch_button(id ~ "_hvac_mode", icon=MODE_COOL_ICON, icon_font=id ~ '_icons_48') | indent(6) }}
+    - {{ macros.touch_button(id ~ "_fan", enabled=initial_power, icon=MODE_FAN_ICON, icon_font=id ~ '_icons_48') | indent(6) }}
+        x: 60
         y: 140
-    - {{ macros.touch_button(id ~ "_fan", icon=MODE_FAN_ICON, icon_font=id ~ '_icons_48') | indent(6) }}
-        y: 140
-        x: 100
 {% endmacro %}

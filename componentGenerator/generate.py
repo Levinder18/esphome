@@ -229,6 +229,8 @@ def main():
         parsed_yaml[section].extend(collect_section(section))
 
     # Add the dispatcher
+    if 'script' not in parsed_yaml:
+        parsed_yaml['script'] = []
     parsed_yaml['script'].append(generate_script_dispatcher(parsed_yaml['script']))
 
     print("\n")

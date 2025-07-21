@@ -1,0 +1,16 @@
+{% macro hvac_controller_page(id, initial_skip='false', on_load=None, room=None, room_display_name=None, room_icon=None, macros=macros) %}
+{% do register_component(id=id) %}
+
+- id: hvac_controller_{{ id }}
+  skip: {{ initial_skip }}
+  on_load:
+    then:
+      - logger.log: "{{ id }} page loaded"
+      {{ on_load | indent(6) }}
+  {# {{ generate_swap_events_handlers(id) | indent(4) }} #}
+  width: 100%
+  bg_color: Black
+  widgets:
+    - {{ macros.room_hvac_controller(room ~ '_hvac_controller', title=room_display_name, room_icon=room_icon, macros=macros) | indent(8) }}
+
+{% endmacro %}

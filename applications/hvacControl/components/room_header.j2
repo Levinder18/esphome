@@ -3,9 +3,59 @@
   Displays the room name and optional icon as a header for each room screen.
   Usage: {{ room_header(id, text, icon=None, font=None) }}
 #}
-{% macro room_header(id, text, icon=None) %}
-{% do register_component(id=id) %}
+{% macro room_header(id, text, initial_power, icon=None) %}
+
+{% set auto = {
+  'script': [
+    {
+      'id': id ~ '_toggle_power',
+      'parameters': {
+        'value': 'bool'
+      },
+      'then': [
+        {
+          'if': {
+            'condition': {
+              'lambda': 'return value == true;'
+            },
+            'then': [
+              {
+                'lvgl.label.update': {
+                  'id': id ~ '_name',
+                  'text_color': 'White'
+                }
+              },
+              {
+                'lvgl.label.update': {
+                  'id': id ~ '_icon',
+                  'text_color': 'White'
+                }
+              }
+            ],
+            'else': [
+              {
+                'lvgl.label.update': {
+                  'id': id ~ '_name',
+                  'text_color': 'Grey'
+                }
+              },
+              {
+                'lvgl.label.update': {
+                  'id': id ~ '_icon',
+                  'text_color': 'Grey'
+                }
+              }
+            ]
+          }
+        },
+      ]
+    },
+  ]
+} %}
+
+{% do register_component(id=id, auto_collected=auto) %}
 obj:
+  id: {{ id }}
   x: 120
   y: 80
   width: 250
@@ -14,11 +64,11 @@ obj:
   widgets:
     {% if text %}
     - label:
-        id: {{ id }}
+        id: {{ id }}_name
         text: "{{ text }}"
         text_font: montserrat_28
         align: CENTER
-        text_color: White
+        text_color: {{ 'White' if initial_power == 'true' else 'Grey' }}
     {% endif %}
     {% if icon %}
     - label:
@@ -26,6 +76,6 @@ obj:
         text: "{{ icon }}"
         text_font: icons_28
         align: TOP_MID
-        text_color: White
+        text_color: {{ 'White' if initial_power == 'true' else 'Grey' }}
     {% endif %}
 {% endmacro %}

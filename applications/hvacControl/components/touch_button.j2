@@ -2,12 +2,49 @@
   TouchButton Component Macro for SVGL/LVGL UI
   Generic round button for toggling or cycling a value, used for Mode, Fan Speed, and Swing controls.
 #}
-{% macro touch_button(id, icon=None, icon_font="icons_48") %}
-{% do register_component(id=id) %}
+
+{% macro touch_button(id, icon=None, icon_font="icons_48", enabled='true') %}
+{% set auto = {
+  'script': [
+    {
+      'id': id ~ '_set_enabled',
+      'parameters': {
+        'value': 'bool'
+      },
+      'then': [
+        {
+          'if': {
+            'condition': {
+              'lambda': 'return value == true;'
+            },
+            'then': [
+              {
+                'lvgl.widget.enable': {
+                  'id': id,
+                }
+              }
+            ],
+            'else': [
+              {
+                'lvgl.widget.disable': {
+                  'id': id,
+                }
+              }
+            ]
+          }
+        },
+      ]
+    }
+  ]
+} %}
+
+{% do register_component(id=id, auto_collected=auto) %}
 button:
   id: {{ id }}
-  checkable: true
+  checkable: false
   align: CENTER
+  state:
+    disabled: {{ 'true' if enabled else 'false' }}
   radius: 500
   widgets:
     - label:

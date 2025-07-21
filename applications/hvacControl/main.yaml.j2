@@ -1,5 +1,9 @@
 {% set local_run = false %}
 
+{% set living_room_id = 'living_room' %}
+{% set bedroom_id = 'bedroom' %}
+{% set rooms = [living_room_id, bedroom_id] %}
+
 substitutions:
   name: "hvaccontroller"
   friendly_name: "HvacController"
@@ -10,9 +14,9 @@ esphome:
   min_version: 2024.11.0
   name_add_mac_suffix: false
   platformio_options:
+    build_flags: ["-DBOARD_HAS_PSRAM"]
     board_build.flash_mode: dio
     board_build.arduino.memory_type: qio_opi
-    build_flags: "-DBOARD_HAS_PSRAM"
     board_upload.maximum_ram_size: 524288
 
 {% if local_run %}
@@ -84,9 +88,22 @@ binary_sensor:
     pin: 
       number: GPIO14
       inverted: true
+    on_multi_click:
+      - timing:
+        - ON for at most 1s
+        - OFF for at most 1s
+        - ON for at least 5s
+        then:
+          - logger.log: "Restarting..."
+          - button.press: platform_restart
     on_click:
       then:
         - logger.log: "Button clicked!"
+        - if:
+            condition: 
+              lambda: return id(current_control) == "hvac";
+            then:
+              - lambda: id(script_dispatcher).execute(str_sprintf("%s_hvac_controller_toggle_power",id(current_room).c_str()));
 
 i2c:
   - id: i2c_bus
@@ -126,7 +143,7 @@ sensor:
             condition: 
               lambda: return id(current_control) == "hvac";
             then:
-              - lambda: id(script_dispatcher).execute(str_sprintf("%s_temperature_meter_increase",id(current_room).c_str()));
+              - lambda: id(script_dispatcher).execute(str_sprintf("%s_hvac_controller_temperature_meter_increase",id(current_room).c_str()));
     on_anticlockwise:
       then:
         - if:
@@ -141,7 +158,7 @@ sensor:
             condition: 
               lambda: return id(current_control) == "hvac";
             then:
-              - lambda: id(script_dispatcher).execute(str_sprintf("%s_temperature_meter_decrease",id(current_room).c_str()));
+              - lambda: id(script_dispatcher).execute(str_sprintf("%s_hvac_controller_temperature_meter_decrease",id(current_room).c_str()));
 
 spi:
   id: spi_bus
@@ -292,7 +309,6 @@ display:
       - delay 50ms
 {% endif %}
 
-# TODO: Move to the component auto collected globals
 font: 
   - file: "gfonts://Material+Symbols+Outlined"
     id: icons_28
@@ -330,55 +346,60 @@ globals:
     restore_value: no
     initial_value: '""'
 
-{#
-# FPS Count
-globals:
-  - id: frame_count
-    type: int
-    restore_value: no
-    initial_value: '0'
-  - id: fps
-    type: int
-    restore_value: no
-    initial_value: '0'
+button:
+  - platform: restart
+    id: platform_restart
+    name: "Restart HvacController"
 
-interval:
-  - interval: 16ms
-    then:
-      - lambda: |-
-          id(frame_count)++;
-  - interval: 1s
-    then:
-      - lambda: |-
-          id(fps) = id(frame_count);
-          id(frame_count) = 0;
-          ESP_LOGI("fps", "FPS: %d", id(fps));
-#}
-
-{#
-interval:
-  - !include components/interval/arc_countdown1_controller.yaml
-  - interval: 500ms
-    then:
-      - lambda: |-
-          // Smoothly increment current_arc_value towards target
-          id(current_arc_value) = (id(current_arc_value) + 1) % 10;
-          lv_arc_set_value(id(arc_id), id(current_arc_value));
-  - interval: 5000ms
-    then:
-      lvgl.page.next:
-#}
+{% set controls = ['hvac'] %}
+{% set hide_during_animations = { 'hvac': ['_hvac_controller_temperature_meter_wrapper', '_hvac_controller_mode', '_hvac_controller_fan']} %}
 
 {% macro generate_swap_events_handlers(page_id) %}
 {% set page_groups = [['main_page', 'test_page'], ['hvac_controller_bedroom', 'hvac_controller_living_room']] %}
+
+{% macro hide_room_widgets() %}
+  {% for control in controls %}
+- if:
+    condition: 
+      lambda: return id(current_control) == "{{ control }}";
+    then: 
+      {% for room in rooms %}
+        {% for suffix in hide_during_animations[control] %}
+      - lvgl.widget.hide: {{ room }}{{ suffix }}
+        {% endfor %}
+      {% endfor %}
+  {% endfor %}
+- delay: 20ms
+{% endmacro %}
+
+{% macro show_room_widgets() %}
+  {% for control in controls %}
+- if:
+    condition: 
+      lambda: return id(current_control) == "{{ control }}";
+    then: 
+      {% for room in rooms %}
+        {% for suffix in hide_during_animations[control] %}
+      - lvgl.widget.show: {{ room }}{{ suffix }}
+        {% endfor %}
+      {% endfor %}
+  {% endfor %}
+{% endmacro %}
+
 on_swipe_right:
-  lvgl.page.previous:
-    animation: MOVE_RIGHT
-    time: 300ms
+  {{ hide_room_widgets() | indent(2) }}
+  - lvgl.page.previous:
+      animation: MOVE_RIGHT
+      time: 300ms
+  - delay: 400ms
+  {{ show_room_widgets() | indent(2) }}
 on_swipe_left:
-  lvgl.page.next:
-    animation: MOVE_LEFT
-    time: 300ms
+  {{ hide_room_widgets() | indent(2) }}
+  - lvgl.page.next:
+      animation: MOVE_LEFT
+      time: 300ms
+  - delay: 400ms
+  {{ show_room_widgets() | indent(2) }}
 on_swipe_up:
   - lambda: |-
 {% for group in page_groups if page_id in group %}
@@ -445,6 +466,10 @@ lvgl:
     buffer_size: 100%
     bg_color: Black
     theme:
+      button:
+        bg_color: '0x2c4ffb'
+        disabled:
+          bg_color: '0x2f2f2f'
       obj:
         pad_all: 0
         border_width: 0
@@ -495,25 +520,8 @@ lvgl:
               text: 'Test Page'
               text_color: White
 
-      - id: hvac_controller_living_room
-        skip: true
-        on_load:
-          then:
-            - logger.log: "hvac_controller_living_room page loaded"
-            {{ generate_on_load_globals_set('hvac', 'living_room') | indent(12) }}
-        {{ generate_swap_events_handlers('hvac_controller_living_room') | indent(8) }}
-        width: 100%
-        bg_color: Black
-        widgets:
-          - {{ room_hvac_controller("living_room", title="Living Room", room_icon=TV_ICON, macros=macros) | indent(12) }}
-      - id: hvac_controller_bedroom
-        skip: true
-        on_load:
-          then:
-            - logger.log: "hvac_controller_bedroom page loaded"
-            {{ generate_on_load_globals_set('hvac', 'bedroom') | indent(12) }}
-        {{ generate_swap_events_handlers('hvac_controller_bedroom') | indent(8) }}
-        width: 100%
-        bg_color: Black
-        widgets:
-          - {{ room_hvac_controller("bedroom", title="Bedroom", room_icon=KING_BED_ICON, macros=macros) | indent(12) }}
+      {{ hvac_controller_page(living_room_id, initial_skip='true', room=living_room_id, room_display_name='Living Room', room_icon=TV_ICON, on_load=generate_on_load_globals_set('hvac', living_room_id), macros=macros) | indent(6) }}
+      {{ generate_swap_events_handlers('hvac_controller_' ~ living_room_id) | indent(8) }}
+      
+      {{ hvac_controller_page(bedroom_id, initial_skip='true', room=bedroom_id, room_display_name='Bedroom', room_icon=KING_BED_ICON, on_load=generate_on_load_globals_set('hvac', bedroom_id), macros=macros) | indent(6) }}
+      {{ generate_swap_events_handlers('hvac_controller_' ~ bedroom_id) | indent(8) }}

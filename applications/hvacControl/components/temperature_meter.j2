@@ -2,151 +2,214 @@
   TemperatureMeter Component Macro for SVGL/LVGL UI
   Displays a circular meter showing the current target temperature, with an overlay label for the value.
 #}
-{% macro temperature_meter(id, initial_value, meter_width=450, meter_height=450, bg_color=Black) %}
+{% macro temperature_meter(id, initial_value, initial_power, meter_width=450, meter_height=450, bg_color=Black) %}
 {% set auto = {
-    "globals": [
-        {    
-            'id': id ~ '_meter_value',
-            'type': 'float',
-            'initial_value': initial_value
+  "globals": [
+    {    
+      'id': id ~ '_meter_value',
+      'type': 'float',
+      'initial_value': initial_value
+    },
+    {    
+      'id': id ~ '_enabled',
+      'type': 'bool',
+      'initial_value': initial_power
+    },
+  ],
+  "script": [
+    {
+      'id': id ~ '_increase',
+      'then': [
+        {
+          'if': {
+            'condition': {
+              'lambda': 'return id(' ~ id ~ '_meter_value) < 30;'
+            },
+            'then': [
+              { 'logger.log': 'Increasing meter ' ~ id },
+              {
+                'script.execute': {
+                  'id': id ~ '_set',
+                  'value': '!lambda return id(' ~ id ~ '_meter_value) + 0.5;'
+                }
+              }
+            ]
+          }
         }
-    ],
-    "script": [
+      ]
+    },
+    {
+      'id': id ~ '_decrease',
+      'then': [
         {
-            'id': id ~ '_increase',
-            'then': [
-                {
-                    'if': {
-                        'condition': {
-                            'lambda': 'return id(' ~ id ~ '_meter_value) < 30;'
-                        },
-                        'then': [
-                            { 'logger.log': 'Increasing meter ' ~ id },
-                            {
-                                'script.execute': {
-                                    'id': id ~ '_set',
-                                    'value': '!lambda return id(' ~ id ~ '_meter_value) + 0.5;'
-                                }
-                            }
-                        ]
-                    }
-                }
-            ]
-        },
-        {
-            'id': id ~ '_decrease',
-            'then': [
-                {
-                    'if': {
-                        'condition': {
-                            'lambda': 'return id(' ~ id ~ '_meter_value) > 20;'
-                        },
-                        'then': [
-                            { 'logger.log': 'Decreasing meter ' ~ id },
-                            {
-                                'script.execute': {
-                                    'id': id ~ '_set',
-                                    'value': '!lambda return id(' ~ id ~ '_meter_value) - 0.5;'
-                                }
-                            }
-                        ]
-                    }
-                }
-            ]
-        },
-        {
-            'id': id ~ '_set_value',
-            'parameters': {
-                'value': 'float'
+          'if': {
+            'condition': {
+              'lambda': 'return id(' ~ id ~ '_meter_value) > 20;'
             },
             'then': [
-                { 'logger.log': {
-                    'format': 'Setting meter ' ~ id ~ 'value to %.1f',
-                    'args': [ 'value' ]
-                    }
-                },
-                {
-                    'lvgl.indicator.update': {
-                        'id': id ~ '_tick_style_lower',
-                        'end_value': '!lambda ' ~ lambda_multiline_body('''
-                            if (id(' ~ id ~ '_meter_value) * 2 < 50) {
-                                return id(' ~ id ~ '_meter_value) * 2;
-                            } else {
-                                return 50;
-                            }
-                        ''')
-                    }
-                },
-                {
-                    'lvgl.indicator.update': {
-                        'id': id ~ '_tick_style_higher',
-                        'start_value': '!lambda ' ~ lambda_multiline_body('''
-                            if (id(' ~ id ~ '_meter_value) * 2 > 50) {
-                                return 50;
-                            } else {
-                                return 0;
-                            }
-                        '''),
-                        'end_value': '!lambda ' ~ lambda_multiline_body('''
-                            if (id(' ~ id ~ '_meter_value) * 2 > 50) {
-                                return id(' ~ id ~ '_meter_value) * 2;
-                            } else {
-                                return 0;
-                            }
-                        ''')
-                    }
+              { 'logger.log': 'Decreasing meter ' ~ id },
+              {
+                'script.execute': {
+                  'id': id ~ '_set',
+                  'value': '!lambda return id(' ~ id ~ '_meter_value) - 0.5;'
                 }
+              }
             ]
-        },
+          }
+        }
+      ]
+    },
+    {
+      'id': id ~ '_set_value',
+      'parameters': {
+        'value': 'float'
+      },
+      'then': [
         {
+          'if': {
+            'condition': {
+              'lambda': 'return id(' ~ id ~ '_enabled);'
+            },
+            'then': [
+              { 'logger.log': {
+                'format': 'Setting meter ' ~ id ~ 'value to %.1f',
+                'args': [ 'value' ]
+                }
+              },
+              {
+                'lvgl.indicator.update': {
+                  'id': id ~ '_tick_style_lower',
+                  'end_value': '!lambda ' ~ lambda_multiline_body('''
+                    if (id(' ~ id ~ '_meter_value) * 2 < 50) {
+                        return id(' ~ id ~ '_meter_value) * 2;
+                    } else {
+                        return 50;
+                    }
+                  ''')
+                }
+              },
+              {
+                'lvgl.indicator.update': {
+                  'id': id ~ '_tick_style_higher',
+                  'start_value': '!lambda ' ~ lambda_multiline_body('''
+                    if (id(' ~ id ~ '_meter_value) * 2 > 50) {
+                        return 50;
+                    } else {
+                        return 0;
+                    }
+                  '''),
+                  'end_value': '!lambda ' ~ lambda_multiline_body('''
+                    if (id(' ~ id ~ '_meter_value) * 2 > 50) {
+                        return id(' ~ id ~ '_meter_value) * 2;
+                    } else {
+                        return 0;
+                    }
+                  ''')
+                }
+              }
+            ],
+            'else': [
+              { 'logger.log': {
+                'format': 'Control is disabled, not setting meter ' ~ id ~ 'value to %.1f',
+                'args': [ 'value' ]
+                }
+              },
+            ]
+          }
+        }
+      ]
+    },
+    {
+      'id': id ~ '_set_global_and_label',
+      'parameters': {
+        'value': 'float'
+      },
+      'then': [
+        {
+          'if': {
+            'condition': {
+              'lambda': 'return id(' ~ id ~ '_enabled);'
+            },
+            'then': [
+              { 'logger.log': {
+                  'format': 'Setting meter ' ~ id ~ ' global and label to %.1f',
+                  'args': [ 'value' ]
+                }
+              },
+              {
+                'globals.set': {
+                  'id': id ~ '_meter_value',
+                  'value': '!lambda return value;'
+                }
+              },
+              {
+                'lvgl.label.update': {
+                  'id': id ~ '_value',
+                  'text': '!lambda return str_sprintf("%.1f\u00B0", id(' ~ id ~ '_meter_value));'
+                }
+              }
+            ],
+            'else': [
+              { 'logger.log': {
+                  'format': 'Control is disabled, not setting meter ' ~ id ~ ' global and label to %.1f',
+                  'args': [ 'value' ]
+                }
+              },
+            ]
+          }
+        },
+      ]
+    },
+    {
+      'id': id ~ '_set',
+      'parameters': {
+        'value': 'float'
+      },
+      'then': [
+        {
+          'script.execute': {
             'id': id ~ '_set_global_and_label',
-            'parameters': {
-                'value': 'float'
-            },
-            'then': [
-                { 'logger.log': {
-                        'format': 'Setting meter ' ~ id ~ ' global and label to %.1f',
-                        'args': [ 'value' ]
-                    }
-                },
-                {
-                    'globals.set': {
-                        'id': id ~ '_meter_value',
-                        'value': '!lambda return value;'
-                    }
-                },
-                {
-                    'lvgl.label.update': {
-                        'id': id ~ '_value',
-                        'text': '!lambda return str_sprintf("%.1f\u00B0", id(' ~ id ~ '_meter_value));'
-                    }
-                }
-            ]
+            'value': '!lambda return value;'
+          }
         },
         {
-            'id': id ~ '_set',
-            'parameters': {
-                'value': 'float'
-            },
-            'then': [
-                {
-                    'script.execute': {
-                        'id': id ~ '_set_global_and_label',
-                        'value': '!lambda return value;'
-                    }
-                },
-                {
-                    'script.execute': {
-                        'id': id ~ '_set_value',
-                        'value': '!lambda return value;'
-                    }
-                }
-            ]
+          'script.execute': {
+            'id': id ~ '_set_value',
+            'value': '!lambda return value;'
+          }
+        }
+      ]
+    },
+    {
+      'id': id ~ '_toggle_power',
+      'parameters':{
+        'value': 'bool'
+      },
+      'then': [
+        {
+          'globals.set': {
+            'id': id ~ '_enabled',
+            'value': '!lambda return value;'
+          }
         },
-    ]
+        {
+          'lvgl.label.update': {
+              'id': id ~ '_value',
+              'text_color': '!lambda ' ~ lambda_multiline_body('''
+                if (value == true) {
+                  return lv_color_hex(0xffffff);
+                }
+                return lv_color_hex(0x808080);
+              ''')
+            }
+        }
+      ]
+    },
+  ]
 } %}
 {% do register_component(id=id, auto_collected=auto) %}
 obj:
+  id: {{ id }}_wrapper
   width: 100%
   height: 100%
   bg_color: Black
@@ -206,6 +269,6 @@ obj:
         id: {{ id }}_value
         text: "{{ initial_value }}\u00B0"
         align: CENTER
-        text_color: White
+        text_color: {{ 'White' if initial_power == 'true' else 'Grey' }}
         text_font: montserrat_48
 {% endmacro %}

@@ -60,6 +60,59 @@
       ]
     },
     {
+      'id': id ~ '_set_value_force',
+      'parameters': {
+        'value': 'float'
+      },
+      'then': [
+        { 'logger.log': {
+          'format': 'Setting meter ' ~ id ~ 'value to %.1f',
+          'args': [ 'value' ]
+          }
+        },
+        {
+          'lvgl.indicator.update': {
+            'id': id ~ '_tick_style_enabled',
+            'start_value': '!lambda ' ~ lambda_multiline_body('''
+                if (id(' ~ id ~ '_enabled) == false) {
+                  return 0;
+                }
+                return 44;
+              '''),
+            'end_value': '!lambda ' ~ lambda_multiline_body('''
+                if (id(' ~ id ~'_enabled) == false) {
+                  return 0;
+                }
+                if (id(' ~ id ~ '_meter_value) * 2 < 60) {
+                  return id(' ~ id ~ '_meter_value) * 2;
+                }
+                return 60;
+            ''')
+          }
+        },
+        {
+          'lvgl.indicator.update': {
+            'id': id ~ '_tick_style_disabled',
+            'start_value': '!lambda ' ~ lambda_multiline_body('''
+                if (id(' ~ id ~ '_enabled) == true) {
+                  return 0;
+                }
+                return 44;
+              '''),
+            'end_value': '!lambda ' ~ lambda_multiline_body('''
+                if (id(' ~ id ~'_enabled) == true) {
+                  return 0;
+                }
+                if (id(' ~ id ~ '_meter_value) * 2 < 60) {
+                  return id(' ~ id ~ '_meter_value) * 2;
+                }
+                return 60;
+            ''')
+          }
+        },
+      ],
+    },
+    {
       'id': id ~ '_set_value',
       'parameters': {
         'value': 'float'
@@ -71,40 +124,10 @@
               'lambda': 'return id(' ~ id ~ '_enabled);'
             },
             'then': [
-              { 'logger.log': {
-                'format': 'Setting meter ' ~ id ~ 'value to %.1f',
-                'args': [ 'value' ]
-                }
-              },
               {
-                'lvgl.indicator.update': {
-                  'id': id ~ '_tick_style_lower',
-                  'end_value': '!lambda ' ~ lambda_multiline_body('''
-                    if (id(' ~ id ~ '_meter_value) * 2 < 50) {
-                        return id(' ~ id ~ '_meter_value) * 2;
-                    } else {
-                        return 50;
-                    }
-                  ''')
-                }
-              },
-              {
-                'lvgl.indicator.update': {
-                  'id': id ~ '_tick_style_higher',
-                  'start_value': '!lambda ' ~ lambda_multiline_body('''
-                    if (id(' ~ id ~ '_meter_value) * 2 > 50) {
-                        return 50;
-                    } else {
-                        return 0;
-                    }
-                  '''),
-                  'end_value': '!lambda ' ~ lambda_multiline_body('''
-                    if (id(' ~ id ~ '_meter_value) * 2 > 50) {
-                        return id(' ~ id ~ '_meter_value) * 2;
-                    } else {
-                        return 0;
-                    }
-                  ''')
+                'script.execute': {
+                  'id': id ~ '_set_value_force',
+                  'value': '!lambda return value;'
                 }
               }
             ],
@@ -202,7 +225,13 @@
                 return lv_color_hex(0x808080);
               ''')
             }
-        }
+        },
+        {
+          'script.execute': {
+            'id': id ~ '_set_value_force',
+            'value': '!lambda return id(' ~ id ~ '_meter_value);'
+          }
+        },
       ]
     },
   ]
@@ -227,44 +256,49 @@ obj:
         bg_opa: 0
         text_color: White
         scales:
-            range_from: 40
+            range_from: 44
             range_to: 60
             angle_range: 240
             rotation: 150
             ticks:
-                count: 21
+                count: 17 # 21
                 length: 20
-                width: 50
+                width: 60
             indicators:
                 - tick_style:
-                    id: {{ id }}_tick_style_lower
-                    start_value: 40
-                    end_value: !lambda |-
-                        if (id({{ id }}_meter_value) * 2 < 50) {
-                            return id({{ id }}_meter_value) * 2;
-                        } else {
-                            return 50;
-                        }
-                    local: true
-                    color_start: 0x342cd3 #342cd3
-                    color_end: 0x05005d #05005d
-                - tick_style:
-                    id: {{ id }}_tick_style_higher
+                    id: {{ id }}_tick_style_enabled
                     start_value: !lambda |-
-                        if (id({{ id }}_meter_value) * 2 > 50) {
-                            return 50;
-                        } else {
-                            return 0;
+                        if (id({{ id }}_enabled) == false) {
+                          return 0;
                         }
+                        return 44;
                     end_value: !lambda |-
-                        if (id({{ id }}_meter_value) * 2 > 50) {
-                            return id({{ id }}_meter_value) * 2;
-                        } else {
-                            return 0;
+                        if (id({{ id }}_enabled) == false) {
+                          return 0;
                         }
-                    local: true
-                    color_start: 0x05005d #05005d
-                    color_end: 0x770101 #770101
+                        if (id({{ id }}_meter_value) * 2 < 60) {
+                          return id({{ id }}_meter_value) * 2;
+                        }
+                        return 60;
+                    color_start: 0x433af3
+                    color_end: 0xcf0303
+                - tick_style:
+                    id: {{ id }}_tick_style_disabled
+                    start_value: !lambda |-
+                        if (id({{ id }}_enabled) == true) {
+                          return 0;
+                        }
+                        return 44;
+                    end_value: !lambda |-
+                        if (id({{ id }}_enabled) == true) {
+                          return 0;
+                        }
+                        if (id({{ id }}_meter_value) * 2 < 60) {
+                          return id({{ id }}_meter_value) * 2;
+                        }
+                        return 60;
+                    color_start: 0x404040
+                    color_end: 0x404040
     - label:
         id: {{ id }}_value
         text: "{{ initial_value }}\u00B0"

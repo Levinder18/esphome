@@ -326,15 +326,14 @@ font:
 time:
   - platform: homeassistant
     id: homeassistant_time
-    # on_time_sync:
-    #   - script.execute: time_update
-    #   - if:
-    #       condition:
-    #         lambda: 'return id(device_last_restart).state == "";'
-    #       then:
-    #         - text_sensor.template.publish:
-    #             id: device_last_restart
-    #             state: !lambda 'return id(homeassistant_time).now().strftime("%a %d %b %Y - %I:%M:%S %p");'
+    on_time_sync:
+      - if:
+          condition:
+            lambda: 'return id(device_last_restart).state == "";'
+          then:
+            - text_sensor.template.publish:
+                id: device_last_restart
+                state: !lambda 'return id(homeassistant_time).now().strftime("%a %d %b %Y - %I:%M:%S %p");'
 
 globals:
   - id: current_control
@@ -345,6 +344,16 @@ globals:
     type: std::string
     restore_value: no
     initial_value: '""'
+
+text_sensor:
+  - platform: version
+    id: esphome_version
+    name: "ESPHome Version"
+  - platform: template
+    name: 'Last Restart'
+    id: device_last_restart
+    icon: mdi:clock
+    entity_category: diagnostic
 
 button:
   - platform: restart

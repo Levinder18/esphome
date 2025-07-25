@@ -114,8 +114,20 @@ binary_sensor:
           - logger.log: "Restarting..."
           - button.press: platform_restart
     on_click:
+      - logger.log: "Button clicked!"
+      {# example call #}
+      - homeassistant.action:
+          action: input_boolean.toggle
+          data:
+            entity_id: input_boolean.bedroom_light
+
+  {# example switch from home assistant #}
+  - platform: homeassistant
+    entity_id: input_boolean.bedroom_light
+    id: bedroom_light
+    on_state:
       then:
-        - logger.log: "Button clicked!"
+        - lambda: 'ESP_LOGI("bedroom light updated to %s", x ? "true" : "false");'
 
 i2c:
   - id: i2c_bus
@@ -161,12 +173,6 @@ sensor:
               - lvgl.resume:
               - lvgl.widget.redraw:
         - logger.log: "Turned anti-clockwise"
-  - platform: homeassistant
-    entity_id: switch.living_room_light
-    id: living_room_light
-  - platform: homeassistant
-    entity_id: input_boolean.bedroom_light
-    id: bedroom_light
 
 spi:
   id: spi_bus
@@ -502,7 +508,7 @@ lvgl:
         on_load:
           then:
             - logger.log: "🚀 main page loaded!"
-            {{ generate_on_load_globals_set('', '') | indent(12) }}
+            {{ generate_on_load_globals_set('test', 'test') | indent(12) }}
         {{ generate_swap_events_handlers('main_page') | indent(8) }}
         width: 100%
         bg_color: Black
@@ -517,7 +523,7 @@ lvgl:
         on_load:
           then:
             - logger.log: "🚀 test page loaded!"
-            {{ generate_on_load_globals_set('', '') | indent(12) }}
+            {{ generate_on_load_globals_set('test', 'test2') | indent(12) }}
         {{ generate_swap_events_handlers('test_page') | indent(8) }}
         width: 100%
         bg_color: Black

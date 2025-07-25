@@ -99,8 +99,42 @@ def collect_section(section):
     for comp in registered_components:
         part = comp["auto_collected"].get(section)
         if part:
-            merged.extend(part)
+            merged = merge_yaml_sections(merged, part)
     return merged
+
+# --- Recursive merge for YAML sections ---
+def merge_yaml_sections(base, addition):
+    """
+    Recursively merge two YAML sections (lists or dicts).
+    For lists of dicts with 'id', merge by id. Otherwise, append.
+    """
+    if isinstance(base, dict) and isinstance(addition, dict):
+        result = dict(base)
+        for k, v in addition.items():
+            if k in result:
+                result[k] = merge_yaml_sections(result[k], v)
+            else:
+                result[k] = v
+        return result
+    elif isinstance(base, list) and isinstance(addition, list):
+        # If both are lists of dicts with 'id', merge by id
+        if all(isinstance(x, dict) and 'id' in x for x in base + addition if isinstance(x, dict)) and base + addition:
+            merged_by_id = {item['id']: dict(item) for item in base if isinstance(item, dict) and 'id' in item}
+            for item in addition:
+                if isinstance(item, dict) and 'id' in item:
+                    if item['id'] in merged_by_id:
+                        merged_by_id[item['id']] = merge_yaml_sections(merged_by_id[item['id']], item)
+                    else:
+                        merged_by_id[item['id']] = dict(item)
+                else:
+                    # If not a dict with id, just append
+                    merged_by_id[object()] = item
+            # Keep original order as much as possible
+            return list(merged_by_id.values())
+        else:
+            return base + addition
+    else:
+        return addition
 
 def render_main_template(env, template_name, context):
     template = env.get_template(template_name)
@@ -223,10 +257,11 @@ def main():
     for comp in registered_components:
         all_sections.update(comp["auto_collected"].keys())
 
+
     # Merge auto-collected sections into the root-level YAML
     for section in all_sections:
         parsed_yaml.setdefault(section, [])
-        parsed_yaml[section].extend(collect_section(section))
+        parsed_yaml[section] = merge_yaml_sections(parsed_yaml[section], collect_section(section))
 
     # Add the dispatcher
     if 'script' not in parsed_yaml:

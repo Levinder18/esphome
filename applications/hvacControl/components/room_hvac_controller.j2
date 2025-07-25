@@ -1,6 +1,25 @@
-{% macro room_hvac_controller(id, title=None, room_icon=None, initial_temperature='25.0', initial_power='false', macros=None) %}
+{% macro room_hvac_controller(id, title=None, room_icon=None, initial_temperature='25.0', initial_power='false', event_condition=None, rotary_sensor_id=None, click_binary_sensor_id=None, macros=None) %}
 
 {% set auto = {
+  'binary_sensor': [
+    {
+      'id': click_binary_sensor_id,
+      'on_click': [
+        {
+          'if': {
+            'condition': {
+              'lambda': 'return ' ~ event_condition ~ ';'
+            },
+            'then': {
+              'script.execute': id ~ '_toggle_power'
+            }
+          } if event_condition else {
+            'script.execute': id ~ '_toggle_power'
+          },
+        }
+      ]
+    } if click_binary_sensor_id
+  ],
   'globals': [
     {    
       'id': id ~ '_power',
@@ -93,7 +112,7 @@ obj:
   height: 100%
   bg_color: Black
   widgets:
-    - {{ macros.temperature_meter(id ~ "_temperature_meter", initial_value=initial_temperature, initial_power=initial_power) | indent(6) }}
+    - {{ macros.temperature_meter(id ~ "_temperature_meter", initial_value=initial_temperature, initial_power=initial_power, rotary_sensor_id=rotary_sensor_id, event_condition=event_condition) | indent(6) }}
     - {{ macros.room_header(id ~ "_header", text=title, icon=room_icon, initial_power=initial_power) | indent(6) }}
     - {{ macros.touch_button(id ~ "_mode", enabled=initial_power, icon=MODE_COOL_ICON, icon_font=id ~ '_icons_48') | indent(6) }}
         x: -60

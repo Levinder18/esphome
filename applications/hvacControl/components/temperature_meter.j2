@@ -2,8 +2,41 @@
   TemperatureMeter Component Macro for SVGL/LVGL UI
   Displays a circular meter showing the current target temperature, with an overlay label for the value.
 #}
-{% macro temperature_meter(id, initial_value, initial_power, meter_width=450, meter_height=450, bg_color=Black) %}
+{% macro temperature_meter(id, initial_value, initial_power, meter_width=450, meter_height=450, bg_color=Black, rotary_sensor_id=None, event_condition=None) %}
 {% set auto = {
+  "sensor": [
+    {
+      'id': rotary_sensor_id,
+      'on_clockwise': [
+        {
+          'if': {
+            'condition': {
+              'lambda': 'return ' ~ event_condition ~ ';'
+            },
+            'then': {
+              'script.execute': id ~ '_increase'
+            }
+          } if event_condition else {
+            'script.execute': id ~ '_increase'
+          },
+        }
+      ],
+      'on_anticlockwise': [
+        {
+          'if': {
+            'condition': {
+              'lambda': 'return ' ~ event_condition ~ ';'
+            },
+            'then': {
+              'script.execute': id ~ '_decrease'
+            }
+          } if event_condition else {
+            'script.execute': id ~ '_increase'
+          },
+        }
+      ]
+    } if rotary_sensor_id
+  ],
   "globals": [
     {    
       'id': id ~ '_meter_value',

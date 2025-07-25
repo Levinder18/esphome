@@ -1,4 +1,4 @@
-{% macro hvac_controller_page(id, initial_skip='false', on_load=None, room=None, room_display_name=None, room_icon=None, macros=macros) %}
+{% macro hvac_controller_page(id, initial_skip='false', on_load=None, room=None, room_display_name=None, room_icon=None, rotary_sensor_id=None, click_binary_sensor_id=None, macros=macros) %}
 {% do register_component(id=id) %}
 
 - id: hvac_controller_{{ id }}
@@ -11,6 +11,6 @@
   width: 100%
   bg_color: Black
   widgets:
-    - {{ macros.room_hvac_controller(room ~ '_hvac_controller', title=room_display_name, room_icon=room_icon, macros=macros) | indent(8) }}
+    - {{ macros.room_hvac_controller(room ~ '_hvac_controller', title=room_display_name, room_icon=room_icon, rotary_sensor_id=rotary_sensor_id, click_binary_sensor_id=click_binary_sensor_id, event_condition='id(current_control) == "hvac" && id(current_room) == "' ~ room ~ '"', macros=macros) | indent(8) }}
 
 {% endmacro %}

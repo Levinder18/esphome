@@ -2,7 +2,24 @@
 
 {% set living_room_id = 'living_room' %}
 {% set bedroom_id = 'bedroom' %}
-{% set rooms = [living_room_id, bedroom_id] %}
+
+{% set TV_ICON="\ue333" %}
+{% set KING_BED_ICON="\uea45" %}
+{% set KITCHEN_ICON="\ueb47" %}
+
+{% set rooms = {
+    living_room_id: {
+      'display_name': 'Living Room',
+      'icon': TV_ICON,
+    }, 
+    bedroom_id: {
+      'display_name': 'Bedroom',
+      'icon': KING_BED_ICON,
+    }
+  } %}
+{% set controls = ['hvac'] %}
+
+{% set hide_during_animations = { 'hvac': ['_hvac_controller_temperature_meter_wrapper', '_hvac_controller_mode', '_hvac_controller_fan']} %}
 
 substitutions:
   name: "hvaccontroller"
@@ -99,11 +116,6 @@ binary_sensor:
     on_click:
       then:
         - logger.log: "Button clicked!"
-        - if:
-            condition: 
-              lambda: return id(current_control) == "hvac";
-            then:
-              - lambda: id(script_dispatcher).execute(str_sprintf("%s_hvac_controller_toggle_power",id(current_room).c_str()));
 
 i2c:
   - id: i2c_bus
@@ -139,11 +151,6 @@ sensor:
               - lvgl.resume:
               - lvgl.widget.redraw:
         - logger.log: "Turned clockwise"
-        - if:
-            condition: 
-              lambda: return id(current_control) == "hvac";
-            then:
-              - lambda: id(script_dispatcher).execute(str_sprintf("%s_hvac_controller_temperature_meter_increase",id(current_room).c_str()));
     on_anticlockwise:
       then:
         - if:
@@ -154,11 +161,12 @@ sensor:
               - lvgl.resume:
               - lvgl.widget.redraw:
         - logger.log: "Turned anti-clockwise"
-        - if:
-            condition: 
-              lambda: return id(current_control) == "hvac";
-            then:
-              - lambda: id(script_dispatcher).execute(str_sprintf("%s_hvac_controller_temperature_meter_decrease",id(current_room).c_str()));
+  - platform: homeassistant
+    entity_id: switch.living_room_light
+    id: living_room_light
+  - platform: homeassistant
+    entity_id: input_boolean.bedroom_light
+    id: bedroom_light
 
 spi:
   id: spi_bus
@@ -171,45 +179,44 @@ time:
     id: esptime
 
 touchscreen:
-{% if local_run %}
-  id: touch
-  platform: sdl
-{% else %}
-touchscreen:
-  platform: cst826
-  id: touch
-  #interrupt_pin: GPIO40
-  #reset_pin: GPIO16
-  i2c_id: i2c_bus
-  skip_probe: True
-  update_interval: 25ms
-  #touch_timeout: 5ms
-{% endif %}
-  on_touch:
-    - logger.log:
-        format: Touch at (%d, %d)
-        args: [touch.x, touch.y]
-    - lambda: |-
-        ESP_LOGI("cal", "x=%d, y=%d, x_raw=%d, y_raw=%0d",
-            touch.x,
-            touch.y,
-            touch.x_raw,
-            touch.y_raw
-            );
-    - lvgl.label.update:
-        id: coord_text
-        text: !lambda return str_sprintf("Touch points:\n id=%d x=%d, y=%d", touches[0].id, touches[0].x, touches[0].y);
-{% if not local_run %}
-  on_release:
-    then:
-      - if:
-          condition: lvgl.is_paused
-          then:
-            - lvgl.page.show: main_page
-            - light.turn_on: display_backlight
-            - lvgl.resume:
-            - lvgl.widget.redraw:
-{% endif %}
+  - id: touch
+    {% if local_run %}
+    platform: sdl
+    {% else %}
+    platform: cst826
+    id: touch
+    #interrupt_pin: GPIO40
+    #reset_pin: GPIO16
+    i2c_id: i2c_bus
+    skip_probe: True
+    update_interval: 25ms
+    #touch_timeout: 5ms
+    {% endif %}
+    on_touch:
+      - logger.log:
+          format: Touch at (%d, %d)
+          args: [touch.x, touch.y]
+      - lambda: |-
+          ESP_LOGI("cal", "x=%d, y=%d, x_raw=%d, y_raw=%0d",
+              touch.x,
+              touch.y,
+              touch.x_raw,
+              touch.y_raw
+              );
+      - lvgl.label.update:
+          id: coord_text
+          text: !lambda return str_sprintf("Touch points:\n id=%d x=%d, y=%d", touches[0].id, touches[0].x, touches[0].y);
+    {% if not local_run %}
+    on_release:
+      then:
+        - if:
+            condition: lvgl.is_paused
+            then:
+              - lvgl.page.show: main_page
+              - light.turn_on: display_backlight
+              - lvgl.resume:
+              - lvgl.widget.redraw:
+    {% endif %}
 
 {% if local_run %}
 display:
@@ -319,10 +326,6 @@ font:
       "\U0000eb47" # Kitchen 
     ]
 
-{% set TV_ICON="\ue333" %}
-{% set KING_BED_ICON="\uea45" %}
-{% set KITCHEN_ICON="\ueb47" %}
-
 time:
   - platform: homeassistant
     id: homeassistant_time
@@ -359,9 +362,6 @@ button:
   - platform: restart
     id: platform_restart
     name: "Restart HvacController"
-
-{% set controls = ['hvac'] %}
-{% set hide_during_animations = { 'hvac': ['_hvac_controller_temperature_meter_wrapper', '_hvac_controller_mode', '_hvac_controller_fan']} %}
 
 {% macro generate_swap_events_handlers(page_id) %}
 {% set page_groups = [['main_page', 'test_page'], ['hvac_controller_bedroom', 'hvac_controller_living_room']] %}
@@ -529,8 +529,7 @@ lvgl:
               text: 'Test Page'
               text_color: White
 
-      {{ hvac_controller_page(living_room_id, initial_skip='true', room=living_room_id, room_display_name='Living Room', room_icon=TV_ICON, on_load=generate_on_load_globals_set('hvac', living_room_id), macros=macros) | indent(6) }}
-      {{ generate_swap_events_handlers('hvac_controller_' ~ living_room_id) | indent(8) }}
-      
-      {{ hvac_controller_page(bedroom_id, initial_skip='true', room=bedroom_id, room_display_name='Bedroom', room_icon=KING_BED_ICON, on_load=generate_on_load_globals_set('hvac', bedroom_id), macros=macros) | indent(6) }}
-      {{ generate_swap_events_handlers('hvac_controller_' ~ bedroom_id) | indent(8) }}
+      {% for room in rooms %}
+        {{ hvac_controller_page(room, initial_skip='true', room=room, room_display_name=rooms[room]['display_name'], room_icon=rooms[room]['icon'], on_load=generate_on_load_globals_set('hvac', room), rotary_sensor_id='encoder', click_binary_sensor_id='front_button', macros=macros) | indent(6) }}
+        {{ generate_swap_events_handlers('hvac_controller_' ~ room) | indent(8) }}
+      {% endfor %}
